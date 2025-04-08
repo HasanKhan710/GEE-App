@@ -1,0 +1,8 @@
+streamlit
+pandas
+pandapower[all]
+xlsxwriter
+geemap
+earthengine-api
+folium
+streamlit-folium
