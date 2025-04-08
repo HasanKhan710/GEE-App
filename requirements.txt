@@ -1,8 +1,10 @@
 streamlit
 pandas
-pandapower[all]
+pandapower
 xlsxwriter
 geemap
 earthengine-api
 folium
 streamlit-folium
+networkx>=2.5
+scipy<1.14
