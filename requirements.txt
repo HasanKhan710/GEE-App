@@ -8,3 +8,4 @@ folium
 streamlit-folium
 networkx>=2.5
 scipy<1.14
+setuptools
