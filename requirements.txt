@@ -1,9 +1,6 @@
 streamlit==1.28.0
-pandapower==2.13.1
 pandas==2.0.3
 XlsxWriter==3.1.2
-earthengine-api==0.1.362
-geemap==0.25.0
-streamlit-folium==0.12.0
 folium==0.14.0
-openpyxl==3.1.2
+streamlit-folium==0.12.0
+earthengine-api==0.1.362
