@@ -294,12 +294,14 @@ uploaded_file = st.file_uploader("Upload IEEE 9-Bus Parameters", type="xlsx")
 intensity = st.selectbox("Risk Intensity", ["Low", "Mid", "High"], index=1)  # Default to Mid
 time_period = st.selectbox("Analysis Period", ["Weekly", "Monthly"], index=0)  # Default to Weekly
 
-# Sample file path
-SAMPLE_FILE_PATH = "IEEE_9BUS_Parameters_only.xlsx"
+# Sample file path (relative to the script's directory)
+# Use os.path to construct the path dynamically
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SAMPLE_FILE_PATH = os.path.join(SCRIPT_DIR, "IEEE_9BUS_Parameters_only.xlsx")
 
 # Check if sample file exists
 if not os.path.exists(SAMPLE_FILE_PATH):
-    st.warning("Sample file not found. Please ensure 'IEEE_9BUS_Parameters_only.xlsx' is in the project directory.")
+    st.warning(f"Sample file not found at: {SAMPLE_FILE_PATH}. Please ensure 'IEEE_9BUS_Parameters_only.xlsx' is in the correct directory.")
 else:
     # Run analysis with sample file on page load if no user file is uploaded
     if not st.session_state.analysis_run and not uploaded_file:
