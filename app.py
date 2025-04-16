@@ -40,6 +40,8 @@ if 'analysis_run' not in st.session_state:
     st.session_state.analysis_run = False
 if 'uploaded_file' not in st.session_state:
     st.session_state.uploaded_file = None
+if 'max_occurrences' not in st.session_state:
+    st.session_state.max_occurrences = None  # To store max occurrences
 
 # Earth Engine authentication - for Streamlit Cloud deployment
 @st.cache_resource
@@ -194,17 +196,17 @@ def process_temperature(uploaded_file, intensity, time_period):
         ).getInfo()
 
         # Display print outputs in Streamlit
-        st.write("ReduceRegion Output for temperature:", stats_t)
-        st.write("ReduceRegion Output for precipitation:", stats_p)
-        st.write("ReduceRegion Output for wind:", stats_w)
+        # st.write("ReduceRegion Output for temperature:", stats_t)
+        # st.write("ReduceRegion Output for precipitation:", stats_p)
+        # st.write("ReduceRegion Output for wind:", stats_w)
 
         max_occurrence_t = stats_t.get(list(stats_t.keys())[0], 1)
         max_occurrence_p = stats_p.get(list(stats_p.keys())[0], 1)
         max_occurrence_w = stats_w.get(list(stats_w.keys())[0], 1)
 
-        st.write(f"Max Occurrences of temperature: {max_occurrence_t}")
-        st.write(f"Max Occurrences of precipitation: {max_occurrence_p}")
-        st.write(f"Max Occurrences of wind: {max_occurrence_w}")
+        # st.write(f"Max Occurrences of temperature: {max_occurrence_t}")
+        # st.write(f"Max Occurrences of precipitation: {max_occurrence_p}")
+        # st.write(f"Max Occurrences of wind: {max_occurrence_w}")
 
         # Classification parameters
         mid1_t, mid2_t = max_occurrence_t/3, 2*max_occurrence_t/3
@@ -338,6 +340,16 @@ if uploaded_file:
         st.session_state.uploaded_file = uploaded_file
     st.success("Analysis complete for uploaded file.")
 
+# Display results in a container
+if st.session_state.analysis_run:
+    with st.container():
+        st.subheader("Analysis Results")
+        if st.session_state.max_occurrences:
+            max_occurrence_t, max_occurrence_p, max_occurrence_w = st.session_state.max_occurrences
+            st.write(f"**Max Occurrences of Temperature:** {max_occurrence_t}")
+            st.write(f"**Max Occurrences of Precipitation:** {max_occurrence_p}")
+            st.write(f"**Max Occurrences of Wind:** {max_occurrence_w}")
+            
 # Display map and results
 if st.session_state.map_obj:
     st.subheader("Weather Risk Visualization")
