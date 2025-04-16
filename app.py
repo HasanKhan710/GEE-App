@@ -301,7 +301,8 @@ def process_temperature(uploaded_file, intensity, time_period):
         # Add layer control
         folium.LayerControl(collapsed=False).add_to(m)
 
-        return m
+        # In the process_temperature function, modify the return statement:
+        return m, (max_occurrence_t, max_occurrence_p, max_occurrence_w)  # <-- Add return of max values
 
     except Exception as e:
         st.error(f"Error: {str(e)}")
@@ -325,8 +326,9 @@ if not st.session_state.analysis_run and not uploaded_file:
         sample_data = load_sample_file()
         if sample_data:
             sample_file = io.BytesIO(sample_data)
-            st.session_state.map_obj = process_temperature(sample_file, intensity, time_period)
-            st.session_state.analysis_run = True
+            # In the sample file loading section:
+            st.session_state.map_obj, max_occ = process_temperature(sample_file, intensity, time_period)
+            st.session_state.max_occurrences = max_occ  # <-- Store max values
             st.session_state.uploaded_file = None
             st.write("Showing results for sample IEEE 9-Bus data. Upload your own file to run a new analysis.")
         else:
@@ -335,8 +337,9 @@ if not st.session_state.analysis_run and not uploaded_file:
 # Handle user-uploaded file
 if uploaded_file:
     with st.spinner("Processing uploaded file..."):
-        st.session_state.map_obj = process_temperature(uploaded_file, intensity, time_period)
-        st.session_state.analysis_run = True
+        # In the sample file loading section:
+        st.session_state.map_obj, max_occ = process_temperature(sample_file, intensity, time_period)
+        st.session_state.max_occurrences = max_occ  # <-- Store max values
         st.session_state.uploaded_file = uploaded_file
     st.success("Analysis complete for uploaded file.")
             
@@ -377,15 +380,25 @@ if st.session_state.map_obj:
     - Combined: Multi-factor risk assessment
     """)
     
-# Display results in a container
+# # Display results in a container
+# if st.session_state.analysis_run:
+#     with st.container():
+#         st.subheader("Analysis Results")
+#         if st.session_state.max_occurrences:
+#             max_occurrence_t, max_occurrence_p, max_occurrence_w = st.session_state.max_occurrences
+#             st.write(f"**Max Occurrences of Temperature:** {max_occurrence_t}")
+#             st.write(f"**Max Occurrences of Precipitation:** {max_occurrence_p}")
+#             st.write(f"**Max Occurrences of Wind:** {max_occurrence_w}")
+
+# Modify the results display section:
 if st.session_state.analysis_run:
     with st.container():
         st.subheader("Analysis Results")
         if st.session_state.max_occurrences:
             max_occurrence_t, max_occurrence_p, max_occurrence_w = st.session_state.max_occurrences
-            st.write(f"**Max Occurrences of Temperature:** {max_occurrence_t}")
-            st.write(f"**Max Occurrences of Precipitation:** {max_occurrence_p}")
-            st.write(f"**Max Occurrences of Wind:** {max_occurrence_w}")
+            st.metric(label="Max Temperature Occurrences", value=f"{max_occurrence_t:.0f} times")
+            st.metric(label="Max Precipitation Occurrences", value=f"{max_occurrence_p:.0f} times")
+            st.metric(label="Max Wind Occurrences", value=f"{max_occurrence_w:.0f} times")
 
 # Run analysis button (optional, for re-running with same file)
 if st.session_state.uploaded_file and st.button("Re-run Analysis"):
