@@ -309,11 +309,11 @@ def process_temperature(uploaded_file, intensity, time_period):
         return None
 
 # Streamlit UI
-st.title("Transmission Line Weather Risk Analyzer")
-st.write("View sample results below or upload your own IEEE 9-Bus Parameters file to analyze weather risks.")
+st.title("Continuous Monitoring of Electricity Grid Using GEE")
+st.write("View sample results below for IEEE 9-Bus or upload your own Network Parameters file to analyze weather risks.")
 
 # File upload
-uploaded_file = st.file_uploader("Upload IEEE 9-Bus Parameters", type="xlsx")
+uploaded_file = st.file_uploader("Upload your Network Parameters", type="xlsx")
 
 # User inputs
 intensity = st.selectbox("Risk Intensity", ["Low", "Mid", "High"], index=1)  # Default to Mid
@@ -374,13 +374,13 @@ if st.session_state.map_obj:
     """, unsafe_allow_html=True)
 
     # Layer guide
-    st.markdown("""
+    st.markdown("
     **Layer Guide:**
     - Transmission Lines: Blue lines
     - Temperature/Precipitation/Wind: Green/Yellow/Red gradients
     - Forecast Layers: Future predictions
     - Combined: Multi-factor risk assessment
-    """)
+    ")
     
 # # Display results in a container
 # if st.session_state.analysis_run:
