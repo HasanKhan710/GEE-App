@@ -294,19 +294,12 @@ uploaded_file = st.file_uploader("Upload IEEE 9-Bus Parameters", type="xlsx")
 intensity = st.selectbox("Risk Intensity", ["Low", "Mid", "High"], index=1)  # Default to Mid
 time_period = st.selectbox("Analysis Period", ["Weekly", "Monthly"], index=0)  # Default to Weekly
 
-# Sample file path (relative to the script's directory)
-# Since files are in the 'main' subdirectory, adjust the path accordingly
-SAMPLE_FILE_PATH = os.path.join("main", "IEEE_9BUS_Parameters_only.xlsx")
+# Sample file path for Streamlit Cloud deployment
+SAMPLE_FILE_PATH = "IEEE_9BUS_Parameters_only.xlsx"
 
 # Check if sample file exists
 if not os.path.exists(SAMPLE_FILE_PATH):
-    # Try an alternative path if the first one fails (for Streamlit Cloud root directory)
-    alternative_path = os.path.join(os.path.dirname(__file__), "main", "IEEE_9BUS_Parameters_only.xlsx")
-    if os.path.exists(alternative_path):
-        SAMPLE_FILE_PATH = alternative_path
-    else:
-        st.warning(f"Sample file not found at: {SAMPLE_FILE_PATH} or {alternative_path}. Please ensure 'IEEE_9BUS_Parameters_only.xlsx' is in the 'main' directory of your repository.")
-        SAMPLE_FILE_PATH = None
+    st.warning(f"Sample file not found at: {SAMPLE_FILE_PATH}. Please ensure 'IEEE_9BUS_Parameters_only.xlsx' is in the correct directory.")
 else:
     # Run analysis with sample file on page load if no user file is uploaded
     if not st.session_state.analysis_run and not uploaded_file:
@@ -316,7 +309,7 @@ else:
                 st.session_state.analysis_run = True
                 st.session_state.uploaded_file = None
         st.info("Showing results for sample IEEE 9-Bus data. Upload your own file to run a new analysis.")
-
+        
 # Handle user-uploaded file
 if uploaded_file:
     with st.spinner("Processing uploaded file..."):
