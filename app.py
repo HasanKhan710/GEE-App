@@ -11,20 +11,21 @@ import folium
 import asyncio
 import os
 import requests
+import io
 
-# Add near the top of your script, after imports
 def load_sample_file():
     """Load sample file from local or GitHub if not found locally"""
-    local_path = "IEEE_9BUS_Parameters_only.xlsx"
+    local_path = "IEEE_9Bus_Parameters_only.xlsx"  # Corrected capitalization
     
     # Try local file first
     if os.path.exists(local_path):
         with open(local_path, "rb") as f:
             return f.read()
     
-    # Fallback to GitHub
-    github_url = "https://raw.githubusercontent.com/HasanKhan710/GEE-App/main/IEEE_9BUS_Parameters_only.xlsx"
+    # Fallback to GitHub - corrected raw URL
+    github_url = "https://raw.githubusercontent.com/HasanKhan710/GEE-App/main/IEEE_9Bus_Parameters_only.xlsx"
     try:
+        st.write(f"Trying to load from: {github_url}")  # Debug info
         response = requests.get(github_url)
         response.raise_for_status()  # Raise exception for bad status codes
         return response.content
