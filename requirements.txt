@@ -6,7 +6,13 @@ geemap
 earthengine-api
 folium
 streamlit-folium
+geopandas
+openpyxl
+nest-asyncio
+numpy
+shapely
 networkx>=2.5
 scipy<1.14
 setuptools
-openpyxl
+matplotlib
+plotly
