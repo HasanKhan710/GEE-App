@@ -14,23 +14,22 @@ import os
 # Initialize session state
 if 'map_obj' not in st.session_state:
     st.session_state.map_obj = None
-    
+if 'analysis_run' not in st.session_state:
+    st.session_state.analysis_run = False
+if 'uploaded_file' not in st.session_state:
+    st.session_state.uploaded_file = None
+
 # Earth Engine authentication - for Streamlit Cloud deployment
-# Using service account authentication instead of interactive authentication
 @st.cache_resource
 def initialize_ee():
-    # Check if we're running on Streamlit Cloud (with secrets)
     if 'EE_SERVICE_ACCOUNT_JSON' in st.secrets:
-        # Get the JSON content from secrets
         service_account_info = st.secrets["EE_SERVICE_ACCOUNT_JSON"]
-        # Initialize Earth Engine with service account credentials
         credentials = ee.ServiceAccountCredentials(
             service_account_info['client_email'], 
             key_data=service_account_info['private_key']
         )
         ee.Initialize(credentials)
     else:
-        # Local development fallback
         try:
             ee.Initialize(project='ee-hasan710')
         except Exception as e:
@@ -73,7 +72,6 @@ def add_ee_layer(self, ee_object, vis_params, name):
         st.error(f"Could not display {name}: {str(e)}")
 
 folium.Map.add_ee_layer = add_ee_layer
-
 
 def process_temperature(uploaded_file, intensity, time_period):
     try:
@@ -120,7 +118,7 @@ def process_temperature(uploaded_file, intensity, time_period):
 
         temp_forecast = "temperature_2m_above_ground"
         u_forecast = "u_component_of_wind_10m_above_ground"
-        v_forecast = "u_component_of_wind_10m_above_ground"
+        v_forecast = "v_component_of_wind_10m_above_ground"
 
         # Validate bands
         first_img = dataset.first()
@@ -265,8 +263,7 @@ def process_temperature(uploaded_file, intensity, time_period):
         m.add_ee_layer(classified_forecast_w.clip(bounding_box), classified_viz, "Forecast Wind")
         m.add_ee_layer(combined_layer.clip(bounding_box), combined_viz, "Combined")
 
-        # KEY CHANGE: Instead of using the EE layer for transmission lines, add them as a regular Folium layer
-        # This ensures they'll be on top of all raster EE layers
+        # Add transmission lines as a regular Folium layer
         for line in line_geometries:
             coords = [(y, x) for x, y in line.coords]  # Folium uses (lat, lon) order
             folium.PolyLine(
@@ -288,49 +285,68 @@ def process_temperature(uploaded_file, intensity, time_period):
 
 # Streamlit UI
 st.title("Transmission Line Weather Risk Analyzer")
-st.write("Upload network parameters and select analysis options:")
+st.write("View sample results below or upload your own IEEE 9-Bus Parameters file to analyze weather risks.")
 
 # File upload
-uploaded_file = st.file_uploader("IEEE 9-Bus Parameters", type="xlsx")
-
-st.write("### Weather Risk Visualizer")
+uploaded_file = st.file_uploader("Upload IEEE 9-Bus Parameters", type="xlsx")
 
 # User inputs
-intensity = st.selectbox("Risk Intensity", ["Low", "Mid", "High"])
-time_period = st.selectbox("Analysis Period", ["Weekly", "Monthly"])
+intensity = st.selectbox("Risk Intensity", ["Low", "Mid", "High"], index=1)  # Default to Mid
+time_period = st.selectbox("Analysis Period", ["Weekly", "Monthly"], index=0)  # Default to Weekly
 
-# Analysis button
-if st.button("Run Analysis") and uploaded_file:
-    with st.spinner("Processing..."):
+# Sample file path
+SAMPLE_FILE_PATH = "IEEE_9BUS_Parameters_only.xlsx"
+
+# Check if sample file exists
+if not os.path.exists(SAMPLE_FILE_PATH):
+    st.warning("Sample file not found. Please ensure 'IEEE_9BUS_Parameters_only.xlsx' is in the project directory.")
+else:
+    # Run analysis with sample file on page load if no user file is uploaded
+    if not st.session_state.analysis_run and not uploaded_file:
+        with st.spinner("Loading sample results..."):
+            with open(SAMPLE_FILE_PATH, "rb") as f:
+                st.session_state.map_obj = process_temperature(f, intensity, time_period)
+                st.session_state.analysis_run = True
+                st.session_state.uploaded_file = None
+        st.info("Showing results for sample IEEE 9-Bus data. Upload your own file to run a new analysis.")
+
+# Handle user-uploaded file
+if uploaded_file:
+    with st.spinner("Processing uploaded file..."):
         st.session_state.map_obj = process_temperature(uploaded_file, intensity, time_period)
+        st.session_state.analysis_run = True
+        st.session_state.uploaded_file = uploaded_file
+    st.success("Analysis complete for uploaded file.")
 
-# Display map from session state
+# Display map and results
 if st.session_state.map_obj:
-    st.success("Analysis Complete")
+    st.subheader("Weather Risk Visualization")
     st_folium(st.session_state.map_obj, width=700, height=500, key="main_map")
 
+    # CSS to ensure layer control is visible
     st.markdown("""
     <style>
     .leaflet-control-layers {
         z-index: 9999 !important;
     }
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-
+    # Custom CSS for styling
     st.markdown("""
-      <style>
-      .streamlit-expanderHeader {
-          font-size: 18px;
-          color: #2c3e50;
-      }
-      .stMap {
-          width: 100%;
-          height: 800px;
-      }
-      </style>
-  """, unsafe_allow_html=True)
+    <style>
+    .streamlit-expanderHeader {
+        font-size: 18px;
+        color: #2c3e50;
+    }
+    .stMap {
+        width: 100%;
+        height: 800px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
+    # Layer guide
     st.markdown("""
     **Layer Guide:**
     - Transmission Lines: Blue lines
@@ -339,7 +355,15 @@ if st.session_state.map_obj:
     - Combined: Multi-factor risk assessment
     """)
 
+# Run analysis button (optional, for re-running with same file)
+if st.session_state.uploaded_file and st.button("Re-run Analysis"):
+    with st.spinner("Re-running analysis..."):
+        st.session_state.map_obj = process_temperature(st.session_state.uploaded_file, intensity, time_period)
+    st.success("Analysis re-run complete.")
+
 # Reset button
 if st.button("Clear Results"):
     st.session_state.map_obj = None
+    st.session_state.analysis_run = False
+    st.session_state.uploaded_file = None
     st.experimental_rerun()
