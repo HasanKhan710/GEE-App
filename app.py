@@ -328,7 +328,7 @@ if not st.session_state.analysis_run and not uploaded_file:
             st.session_state.map_obj = process_temperature(sample_file, intensity, time_period)
             st.session_state.analysis_run = True
             st.session_state.uploaded_file = None
-            st.info("Showing results for sample IEEE 9-Bus data. Upload your own file to run a new analysis.")
+            st.write("Showing results for sample IEEE 9-Bus data. Upload your own file to run a new analysis.")
         else:
             st.error("Could not load sample file. Please upload your own file to run an analysis.")
         
@@ -339,16 +339,6 @@ if uploaded_file:
         st.session_state.analysis_run = True
         st.session_state.uploaded_file = uploaded_file
     st.success("Analysis complete for uploaded file.")
-
-# Display results in a container
-if st.session_state.analysis_run:
-    with st.container():
-        st.subheader("Analysis Results")
-        if st.session_state.max_occurrences:
-            max_occurrence_t, max_occurrence_p, max_occurrence_w = st.session_state.max_occurrences
-            st.write(f"**Max Occurrences of Temperature:** {max_occurrence_t}")
-            st.write(f"**Max Occurrences of Precipitation:** {max_occurrence_p}")
-            st.write(f"**Max Occurrences of Wind:** {max_occurrence_w}")
             
 # Display map and results
 if st.session_state.map_obj:
@@ -386,6 +376,16 @@ if st.session_state.map_obj:
     - Forecast Layers: Future predictions
     - Combined: Multi-factor risk assessment
     """)
+    
+# Display results in a container
+if st.session_state.analysis_run:
+    with st.container():
+        st.subheader("Analysis Results")
+        if st.session_state.max_occurrences:
+            max_occurrence_t, max_occurrence_p, max_occurrence_w = st.session_state.max_occurrences
+            st.write(f"**Max Occurrences of Temperature:** {max_occurrence_t}")
+            st.write(f"**Max Occurrences of Precipitation:** {max_occurrence_p}")
+            st.write(f"**Max Occurrences of Wind:** {max_occurrence_w}")
 
 # Run analysis button (optional, for re-running with same file)
 if st.session_state.uploaded_file and st.button("Re-run Analysis"):
