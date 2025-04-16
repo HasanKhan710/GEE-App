@@ -345,42 +345,37 @@ if uploaded_file:
         st.session_state.uploaded_file = uploaded_file
     st.success("Analysis complete for uploaded file.")
             
-# Display map and results
-if st.session_state.map_obj:
-    st.subheader("Weather Risk Visualization")
-    st_folium(st.session_state.map_obj, width=700, height=500, key="main_map")
-
-    # CSS to ensure layer control is visible
+# CSS to adjust spacing and layer control
     st.markdown("""
     <style>
+    /* Remove gap after map */
+    div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="stVerticalBlockBorderWrapper"]) + div {
+        padding-top: 0 !important;
+        margin-top: -12px !important;
+    }
+
+    /* Layer guide styling */
+    div[data-testid="stMarkdownContainer"] {
+        margin-top: -25px !important;
+        padding: 8px !important;
+        background: #f8f9fa;
+        border-radius: 4px;
+    }
+    
     .leaflet-control-layers {
         z-index: 9999 !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # Custom CSS for styling
+    # Layer guide with tight spacing
     st.markdown("""
-    <style>
-    .streamlit-expanderHeader {
-        font-size: 18px;
-        color: #2c3e50;
-    }
-    .stMap {
-        width: 100%;
-        height: 800px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Layer guide
-    st.markdown("
     **Layer Guide:**
     - Transmission Lines: Blue lines
     - Temperature/Precipitation/Wind: Green/Yellow/Red gradients
     - Forecast Layers: Future predictions
     - Combined: Multi-factor risk assessment
-    ")
+    """)
     
 # # Display results in a container
 # if st.session_state.analysis_run:
