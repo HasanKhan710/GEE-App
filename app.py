@@ -329,6 +329,7 @@ if not st.session_state.analysis_run and not uploaded_file:
             # In the sample file loading section:
             st.session_state.map_obj, max_occ = process_temperature(sample_file, intensity, time_period)
             st.session_state.max_occurrences = max_occ  # <-- Store max values
+            st.session_state.analysis_run = True  # <-- Add this
             st.session_state.uploaded_file = None
             st.write("Showing results for sample IEEE 9-Bus data. Upload your own file to run a new analysis.")
         else:
@@ -338,8 +339,9 @@ if not st.session_state.analysis_run and not uploaded_file:
 if uploaded_file:
     with st.spinner("Processing uploaded file..."):
         # In the sample file loading section:
-        st.session_state.map_obj, max_occ = process_temperature(sample_file, intensity, time_period)
+        st.session_state.map_obj, max_occ = process_temperature(uploaded_file, intensity, time_period)
         st.session_state.max_occurrences = max_occ  # <-- Store max values
+        st.session_state.analysis_run = True  # <-- Add this
         st.session_state.uploaded_file = uploaded_file
     st.success("Analysis complete for uploaded file.")
             
@@ -400,10 +402,13 @@ if st.session_state.analysis_run:
             st.metric(label="Max Precipitation Occurrences", value=f"{max_occurrence_p:.0f} times")
             st.metric(label="Max Wind Occurrences", value=f"{max_occurrence_w:.0f} times")
 
-# Run analysis button (optional, for re-running with same file)
+# Change the re-run analysis code to handle the tuple return:
 if st.session_state.uploaded_file and st.button("Re-run Analysis"):
     with st.spinner("Re-running analysis..."):
-        st.session_state.map_obj = process_temperature(st.session_state.uploaded_file, intensity, time_period)
+        st.session_state.map_obj, max_occ = process_temperature(
+            st.session_state.uploaded_file, intensity, time_period
+        )
+        st.session_state.max_occurrences = max_occ
     st.success("Analysis re-run complete.")
 
 # Reset button
