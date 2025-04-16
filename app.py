@@ -10,6 +10,27 @@ from streamlit_folium import st_folium
 import folium
 import asyncio
 import os
+import requests
+
+# Add near the top of your script, after imports
+def load_sample_file():
+    """Load sample file from local or GitHub if not found locally"""
+    local_path = "IEEE_9BUS_Parameters_only.xlsx"
+    
+    # Try local file first
+    if os.path.exists(local_path):
+        with open(local_path, "rb") as f:
+            return f.read()
+    
+    # Fallback to GitHub
+    github_url = "https://raw.githubusercontent.com/HasanKhan710/GEE-App/main/IEEE_9BUS_Parameters_only.xlsx"
+    try:
+        response = requests.get(github_url)
+        response.raise_for_status()  # Raise exception for bad status codes
+        return response.content
+    except Exception as e:
+        st.error(f"Failed to load sample file from GitHub: {e}")
+        return None
 
 # Initialize session state
 if 'map_obj' not in st.session_state:
@@ -294,21 +315,19 @@ uploaded_file = st.file_uploader("Upload IEEE 9-Bus Parameters", type="xlsx")
 intensity = st.selectbox("Risk Intensity", ["Low", "Mid", "High"], index=1)  # Default to Mid
 time_period = st.selectbox("Analysis Period", ["Weekly", "Monthly"], index=0)  # Default to Weekly
 
-# Sample file path for Streamlit Cloud deployment
-SAMPLE_FILE_PATH = "IEEE_9BUS_Parameters_only.xlsx"
 
-# Check if sample file exists
-if not os.path.exists(SAMPLE_FILE_PATH):
-    st.warning(f"Sample file not found at: {SAMPLE_FILE_PATH}. Please ensure 'IEEE_9BUS_Parameters_only.xlsx' is in the correct directory.")
-else:
-    # Run analysis with sample file on page load if no user file is uploaded
-    if not st.session_state.analysis_run and not uploaded_file:
-        with st.spinner("Loading sample results..."):
-            with open(SAMPLE_FILE_PATH, "rb") as f:
-                st.session_state.map_obj = process_temperature(f, intensity, time_period)
-                st.session_state.analysis_run = True
-                st.session_state.uploaded_file = None
-        st.info("Showing results for sample IEEE 9-Bus data. Upload your own file to run a new analysis.")
+# Then replace your sample file loading section with:
+if not st.session_state.analysis_run and not uploaded_file:
+    with st.spinner("Loading sample results..."):
+        sample_data = load_sample_file()
+        if sample_data:
+            sample_file = io.BytesIO(sample_data)
+            st.session_state.map_obj = process_temperature(sample_file, intensity, time_period)
+            st.session_state.analysis_run = True
+            st.session_state.uploaded_file = None
+            st.info("Showing results for sample IEEE 9-Bus data. Upload your own file to run a new analysis.")
+        else:
+            st.error("Could not load sample file. Please upload your own file to run an analysis.")
         
 # Handle user-uploaded file
 if uploaded_file:
