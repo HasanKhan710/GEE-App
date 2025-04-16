@@ -16,3 +16,4 @@ scipy<1.14
 setuptools
 matplotlib
 plotly
+requests
