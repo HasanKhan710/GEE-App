@@ -350,38 +350,43 @@ if st.session_state.map_obj:
     st.subheader("Weather Risk Visualization")
     st_folium(st.session_state.map_obj, width=700, height=500, key="main_map")
             
-# CSS to adjust spacing and layer control
+# CSS to ensure layer control is visible
     st.markdown("""
     <style>
-    /* Remove gap after map */
-    div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="stVerticalBlockBorderWrapper"]) + div {
-        padding-top: 0 !important;
-        margin-top: -12px !important;
-    }
-
-    /* Layer guide styling */
-    div[data-testid="stMarkdownContainer"] {
-        margin-top: -25px !important;
-        padding: 8px !important;
-        background: #f8f9fa;
-        border-radius: 4px;
-    }
-    
     .leaflet-control-layers {
         z-index: 9999 !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # Layer guide with tight spacing
+    # Custom CSS for styling
     st.markdown("""
-    **Layer Guide:**
-    - Transmission Lines: Blue lines
-    - Temperature/Precipitation/Wind: Green/Yellow/Red gradients
-    - Forecast Layers: Future predictions
-    - Combined: Multi-factor risk assessment
-    """)
-    
+    <style>
+    .streamlit-expanderHeader {
+        font-size: 18px;
+        color: #2c3e50;
+    }
+    .stMap {
+        width: 100%;
+        height: 800px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Use columns to control the layout of the Layer Guide
+    col1, col2 = st.columns([3, 1])  # 3:1 ratio for content and empty space
+    with col1:
+        st.markdown("""
+        **Layer Guide:**
+        - Transmission Lines: Blue lines
+        - Temperature/Precipitation/Wind: Green/Yellow/Red gradients
+        - Forecast Layers: Future predictions
+        - Combined: Multi-factor risk assessment
+        """)
+    with col2:
+        # Leave this column empty to accommodate the floating layer control
+        pass
+        
 # # Display results in a container
 # if st.session_state.analysis_run:
 #     with st.container():
