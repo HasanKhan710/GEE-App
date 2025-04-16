@@ -344,6 +344,11 @@ if uploaded_file:
         st.session_state.analysis_run = True  # <-- Add this
         st.session_state.uploaded_file = uploaded_file
     st.success("Analysis complete for uploaded file.")
+
+# Display map and results
+if st.session_state.map_obj:
+    st.subheader("Weather Risk Visualization")
+    st_folium(st.session_state.map_obj, width=700, height=500, key="main_map")
             
 # CSS to adjust spacing and layer control
     st.markdown("""
