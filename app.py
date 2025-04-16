@@ -69,7 +69,7 @@ def add_ee_layer(self, ee_object, vis_params, name):
                 control=True
             ).add_to(self)
     except Exception as e:
-        st.error(f"Could not display {name}: {str(e)}")
+        st.error(f" Dolanot display {name}: {str(e)}")
 
 folium.Map.add_ee_layer = add_ee_layer
 
@@ -295,13 +295,18 @@ intensity = st.selectbox("Risk Intensity", ["Low", "Mid", "High"], index=1)  # D
 time_period = st.selectbox("Analysis Period", ["Weekly", "Monthly"], index=0)  # Default to Weekly
 
 # Sample file path (relative to the script's directory)
-# Use os.path to construct the path dynamically
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SAMPLE_FILE_PATH = os.path.join(SCRIPT_DIR, "IEEE_9BUS_Parameters_only.xlsx")
+# Since files are in the 'main' subdirectory, adjust the path accordingly
+SAMPLE_FILE_PATH = os.path.join("main", "IEEE_9BUS_Parameters_only.xlsx")
 
 # Check if sample file exists
 if not os.path.exists(SAMPLE_FILE_PATH):
-    st.warning(f"Sample file not found at: {SAMPLE_FILE_PATH}. Please ensure 'IEEE_9BUS_Parameters_only.xlsx' is in the correct directory.")
+    # Try an alternative path if the first one fails (for Streamlit Cloud root directory)
+    alternative_path = os.path.join(os.path.dirname(__file__), "main", "IEEE_9BUS_Parameters_only.xlsx")
+    if os.path.exists(alternative_path):
+        SAMPLE_FILE_PATH = alternative_path
+    else:
+        st.warning(f"Sample file not found at: {SAMPLE_FILE_PATH} or {alternative_path}. Please ensure 'IEEE_9BUS_Parameters_only.xlsx' is in the 'main' directory of your repository.")
+        SAMPLE_FILE_PATH = None
 else:
     # Run analysis with sample file on page load if no user file is uploaded
     if not st.session_state.analysis_run and not uploaded_file:
