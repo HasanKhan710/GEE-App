@@ -309,8 +309,8 @@ def process_temperature(uploaded_file, intensity, time_period):
         return None
 
 # Streamlit UI
-st.title("Continuous Monitoring of Electricity Grid Using GEE")
-st.write("View sample results below for IEEE 9-Bus or upload your own Network Parameters file to analyze weather risks.")
+st.title("Continuous Monitoring of Climate Risks to Electricity Grid Using Google Earth Engine (GEE)")
+st.write("View sample results below for IEEE 9-Bus System or upload your own Network Parameters file to analyze weather risks.")
 
 # File upload
 uploaded_file = st.file_uploader("Upload your Network Parameters", type="xlsx")
