@@ -14,6 +14,12 @@ import random
 import geemap
 import numpy as np
 
+# Set page configuration
+st.set_page_config(
+    page_title="Continuous Monitoring of Climate Risks to Electricity Grid using Google Earth Engine",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # Earth Engine authentication - for Streamlit Cloud deployment
 @st.cache_resource
@@ -35,12 +41,6 @@ def initialize_ee():
 # Initialize Earth Engine
 initialize_ee()
 
-# Set page configuration
-st.set_page_config(
-    page_title="Continuous Monitoring of Climate Risks to Electricity Grid using Google Earth Engine",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
