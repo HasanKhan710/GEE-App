@@ -506,7 +506,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
                 try:
                     # Initialize Earth Engine if not already done
                     try:
-                        ee.Initialize(project='ee-hasan710')
+                        initialize_ee()
                     except Exception as e:
                         st.error(f"Error initializing Earth Engine: {str(e)}")
 
