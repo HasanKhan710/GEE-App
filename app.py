@@ -703,7 +703,8 @@ if selection == "Network Initialization":
 
     if uploaded_file is None and not st.session_state.show_results:
         st.info("Please upload an Excel file to proceed.")
-        
+
+# Page 2: Weather Risk Visualisation Using GEE
 # Page 2: Weather Risk Visualisation Using GEE
 elif selection == "Weather Risk Visualisation Using GEE":
     st.title("Weather Risk Visualisation Using GEE")
@@ -1124,12 +1125,18 @@ elif selection == "Weather Risk Visualisation Using GEE":
                                                                          risk_scores))]
                     }
 
+                    # Create a mapping of (from_bus, to_bus) to risk_score for filtered lines
+                    line_to_risk = dict(zip([(f, t) for f, t, _ in line_outage_data["risk_scores"]], risk_scores))
+                    filtered_risk_scores = [line_to_risk.get((from_bus, to_bus), 0) for from_bus, to_bus in filtered_lines_day1]
+
+                    # Construct outage_data with correct risk scores
                     outage_data = [
-                        {"line": f"From Bus {from_bus} to Bus {to_bus}", "outage_hours": hours, "risk_score": score}
-                        for (from_bus, to_bus), hours, score in zip(filtered_lines_day1, outage_hour_day, 
-                                                                    [s for _, _, s in [(f, t, s) for f, t, s in zip(st.session_state.network_data['df_line']["from_bus"], 
-                                                                                                                    st.session_state.network_data['df_line']["to_bus"], 
-                                                                                                                    risk_scores)] if (f, t) in filtered_lines_day1])
+                        {
+                            "line": f"From Bus {from_bus} to Bus {to_bus}",
+                            "outage_hours": hours,
+                            "risk_score": score
+                        }
+                        for (from_bus, to_bus), hours, score in zip(filtered_lines_day1, outage_hour_day, filtered_risk_scores)
                     ]
 
                     # Mock max occurrences since they're not returned by the new function
@@ -1354,128 +1361,6 @@ elif selection == "Weather Risk Visualisation Using GEE":
             else:
                 st.info("Select parameters and click 'Process Weather Risk Data' to analyze weather risks to the electricity grid.")
 
-def Network_initialize(uploaded_file):
-    net = pp.create_empty_network()
-
-    # --- Create Buses ---
-    df_bus = pd.read_excel(uploaded_file, sheet_name="Bus Parameters", index_col=0)
-    for idx, row in df_bus.iterrows():
-        pp.create_bus(net,
-                      name=row["name"],
-                      vn_kv=row["vn_kv"],
-                      zone=row["zone"],
-                      in_service=row["in_service"],
-                      max_vm_pu=row["max_vm_pu"],
-                      min_vm_pu=row["min_vm_pu"])
-
-    # --- Create Loads ---
-    df_load = pd.read_excel(uploaded_file, sheet_name="Load Parameters", index_col=0)
-    for idx, row in df_load.iterrows():
-        pp.create_load(net, bus=row["bus"],
-                       p_mw=row["p_mw"],
-                       q_mvar=row["q_mvar"],
-                       in_service=row["in_service"])
-
-    # --- Create Generators/External Grid ---
-    df_slack = pd.read_excel(uploaded_file, sheet_name="Generator Parameters", index_col=0)
-    for idx, row in df_slack.iterrows():
-        if row["slack_weight"] == 1:
-            ext_grid = pp.create_ext_grid(net,
-                              bus=row["bus"],
-                              vm_pu=row["vm_pu"],
-                              va_degree=0)
-            pp.create_poly_cost(net, element=ext_grid, et="ext_grid",
-                            cp0_eur_per_mw=row["cp0_pkr_per_mw"],
-                            cp1_eur_per_mw=row["cp1_pkr_per_mw"],
-                            cp2_eur_per_mw=row["cp2_pkr_per_mw"],
-                            cp0_eur_per_mvar=row["cp0_pkr_per_mvar"],
-                            cq1_eur_per_mvar=row["cq1_pkr_per_mvar"],
-                            cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
-        else:
-            gen_idx = pp.create_gen(net,
-                          bus=row["bus"],
-                          p_mw=row["p_mw"],
-                          vm_pu=row["vm_pu"],
-                          min_q_mvar=row["min_q_mvar"],
-                          max_q_mvar=row["max_q_mvar"],
-                          scaling=row["scaling"],
-                          in_service=row["in_service"],
-                          slack_weight=row["slack_weight"],
-                          controllable=row["controllable"],
-                          max_p_mw=row["max_p_mw"],
-                          min_p_mw=row["min_p_mw"])
-            pp.create_poly_cost(net, element=gen_idx, et="gen",
-                            cp0_eur_per_mw=row["cp0_pkr_per_mw"],
-                            cp1_eur_per_mw=row["cp1_pkr_per_mw"],
-                            cp2_eur_per_mw=row["cp2_pkr_per_mw"],
-                            cp0_eur_per_mvar=row["cp0_pkr_per_mvar"],
-                            cq1_eur_per_mvar=row["cq1_pkr_per_mvar"],
-                            cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
-
-    # --- Create Lines ---
-    df_line = pd.read_excel(uploaded_file, sheet_name="Line Parameters", index_col=0)
-    for idx, row in df_line.iterrows():
-        if pd.isna(row["parallel"]):
-            continue
-        if isinstance(row["geodata"], str):
-            geodata = ast.literal_eval(row["geodata"])
-        else:
-            geodata = row["geodata"]
-        pp.create_line_from_parameters(net,
-                                      from_bus=row["from_bus"],
-                                      to_bus=row["to_bus"],
-                                      length_km=row["length_km"],
-                                      r_ohm_per_km=row["r_ohm_per_km"],
-                                      x_ohm_per_km=row["x_ohm_per_km"],
-                                      c_nf_per_km=row["c_nf_per_km"],
-                                      max_i_ka=row["max_i_ka"],
-                                      in_service=row["in_service"],
-                                      max_loading_percent=row["max_loading_percent"],
-                                      geodata=geodata)
-
-    xls = pd.ExcelFile(uploaded_file)
-    if "Transformer Parameters" in xls.sheet_names:
-        df_trafo = pd.read_excel(uploaded_file, sheet_name="Transformer Parameters", index_col=0)
-        for idx, row in df_trafo.iterrows():
-            pp.create_transformer_from_parameters(net,
-                hv_bus=row["hv_bus"],
-                lv_bus=row["lv_bus"],
-                sn_mva=row["sn_mva"],
-                vn_hv_kv=row["vn_hv_kv"],
-                vn_lv_kv=row["vn_lv_kv"],
-                vk_percent=row["vk_percent"],
-                vkr_percent=row["vkr_percent"],
-                pfe_kw=row["pfe_kw"],
-                i0_percent=row["i0_percent"],
-                in_service=row["in_service"],
-                max_loading_percent=row["max_loading_percent"])
-
-    df_load_profile = pd.read_excel(uploaded_file, sheet_name="Load Profile")
-    df_load_profile.columns = df_load_profile.columns.str.strip()
-    load_dynamic = {}
-    for col in df_load_profile.columns:
-        m = re.match(r"p_mw_bus_(\d+)", col)
-        if m:
-            bus = int(m.group(1))
-            q_col = f"q_mvar_bus_{bus}"
-            if q_col in df_load_profile.columns:
-                load_dynamic[bus] = {"p": col, "q": q_col}
-
-    df_gen_profile = pd.read_excel(uploaded_file, sheet_name="Generator Profile")
-    df_gen_profile.columns = df_gen_profile.columns.str.strip()
-    gen_dynamic = {}
-    for col in df_gen_profile.columns:
-        if col.startswith("p_mw"):
-            numbers = re.findall(r'\d+', col)
-            if numbers:
-                bus = int(numbers[-1])
-                gen_dynamic[bus] = col
-
-    num_hours = len(df_load_profile)
-
-    if "Transformer Parameters" in xls.sheet_names:
-        return [net, df_bus, df_slack, df_line, num_hours, load_dynamic, gen_dynamic, df_load_profile, df_gen_profile, df_trafo]
-    return [net, df_bus, df_slack, df_line, num_hours, load_dynamic, gen_dynamic, df_load_profile, df_gen_profile]
 
 if selection == "Business As Usual":
     st.title("Business As Usual Analysis")
