@@ -1961,9 +1961,8 @@ elif selection == "Business As Usual":
                         'shedding_buses': shedding_buses
                     }
                     
-                                            
                     except Exception as e:
-                        st.error(f"Error generating visualization: {str(e)}")
+                        st.error(f"Error running BAU: {str(e)}")
                         st.error(traceback.format_exc())
             # Display analysis results if available
         if st.session_state.bau_results is not None:
