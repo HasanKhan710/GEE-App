@@ -26,6 +26,18 @@ import math
 import re
 import ast
 
+import pandas as pd
+import numpy as np
+import geopandas as gpd
+import folium
+from streamlit_folium import st_folium
+import pandapower as pp
+import re
+import ast
+import math
+import traceback
+from shapely.geometry import LineString, Point
+
 
 # Set page configuration
 st.set_page_config(
@@ -1964,108 +1976,62 @@ elif selection == "Business As Usual":
                     st.error(f"Error running Business As Usual analysis: {str(e)}")
                     st.error(traceback.format_exc())
         
-        # ADDED: Display analysis results if available
-        import streamlit as st
-import pandas as pd
-import numpy as np
-import geopandas as gpd
-import folium
-from streamlit_folium import st_folium
-import pandapower as pp
-import re
-import ast
-import math
-import traceback
-from shapely.geometry import LineString, Point
-
 # This is the fixed visualization section for your Business As Usual page
+# Replace the visualization section in the "Business As Usual" page with this code
 
-if st.session_state.bau_results is not None:
+# Visualization
+st.subheader("Visualize Business As Usual")
+if st.session_state.bau_results is None:
+    st.info("Please run the Business As Usual analysis first.")
+else:
     num_hours = len(st.session_state.network_data['df_load_profile'])
-    hour_options = [f"Hour {i}" for i in range(num_hours)]
+    hour_options = list(range(num_hours))
     selected_hour = st.selectbox("Select Hour to Visualize", options=hour_options)
-    hour_idx = int(selected_hour.split()[-1])
     
-    # Display cached map if available and matches selected hour
-    if st.session_state.bau_map_obj is not None and st.session_state.selected_hour == hour_idx:
-        st.write(f"### Network Loading Visualization - Hour {hour_idx}")
-        st_folium(st.session_state.bau_map_obj, width=800, height=600, key=f"bau_map_cached_{hour_idx}")
-    
+    # Only generate the map when button is clicked to avoid auto-refreshing issues
     if st.button("Generate Visualization"):
-        with st.spinner("Generating visualization..."):
+        with st.spinner(f"Generating map for Hour {selected_hour}..."):
             try:
-                # Get the necessary data
                 df_line = st.session_state.network_data['df_line'].copy()
                 df_load = st.session_state.network_data['df_load'].copy()
                 df_trafo = st.session_state.network_data.get('df_trafo')
-                loading_percent = st.session_state.bau_results['loading_percent_bau'][hour_idx]
+                loading_percent = st.session_state.bau_results['loading_percent_bau'][selected_hour]
                 shedding_buses = st.session_state.bau_results['shedding_buses']
                 no_of_lines = len(df_line) if df_trafo is None else len(df_line) - len(df_trafo)
                 line_idx_map = st.session_state.get('line_idx_map', {})
-                trafo_idx_map = st.session_state.get('trafo_idx_map', {}) 
+                trafo_idx_map = st.session_state.get('trafo_idx_map', {})
                 
-                # Fix 1: Better geodata parsing with error handling
-                def parse_geodata(x):
-                    if isinstance(x, str):
-                        try:
-                            coords = ast.literal_eval(x)
-                            # Make sure we convert from (lat, lon) to (lon, lat) for LineString
-                            return [(lon, lat) for lat, lon in coords]
-                        except (ValueError, SyntaxError):
-                            # Return a default coordinate if parsing fails
-                            return [(0, 0), (0.001, 0.001)]  # tiny line to avoid errors
-                    elif isinstance(x, list):
-                        return x
-                    else:
-                        return [(0, 0), (0.001, 0.001)]
-                
-                # Fix 2: Carefully create valid geometries
-                geometries = []
-                for idx, row in df_line.iterrows():
-                    coords = parse_geodata(row["geodata"])
-                    if len(coords) >= 2:  # LineString needs at least 2 points
-                        geometries.append((idx, LineString(coords)))
-                    else:
-                        # Create a tiny line to avoid errors
-                        geometries.append((idx, LineString([(0, 0), (0.001, 0.001)])))
-                
-                # Fix 3: Create GeoDataFrame with proper indexing
-                gdf = pd.DataFrame([(idx, geom) for idx, geom in geometries], columns=['idx', 'geometry'])
-                gdf = gpd.GeoDataFrame(gdf, geometry='geometry', crs="EPSG:4326")
-                
-                # Add original df_line columns to gdf
-                for col in df_line.columns:
-                    if col != 'geodata':  # Skip geodata as we've already processed it
-                        gdf[col] = gdf['idx'].map(df_line[col].to_dict())
-                
-                # Fix 4: Safely map loading values
-                gdf["loading"] = gdf["idx"].apply(
-                    lambda i: loading_percent[i] if i < len(loading_percent) and loading_percent[i] is not None else 0.0
+                # Prepare GeoDataFrame
+                df_line["geodata"] = df_line["geodata"].apply(
+                    lambda x: [(lon, lat) for lat, lon in eval(x)] if isinstance(x, str) else x
                 )
+                gdf = gpd.GeoDataFrame(df_line, geometry=[LineString(coords) for coords in df_line["geodata"]], crs="EPSG:4326")
+                gdf["idx"] = gdf.index
+                
+                # Handle possible None values in loading_percent
+                for i in range(len(gdf)):
+                    if i < len(loading_percent) and loading_percent[i] is not None:
+                        gdf.at[i, "loading"] = loading_percent[i]
+                    else:
+                        gdf.at[i, "loading"] = 0.0
                 
                 # Weather-down lines
                 weather_down_set = set()
                 if "line_outages" in st.session_state:
                     for (fbus, tbus, start_hr) in st.session_state.line_outages:
-                        if hour_idx >= start_hr:
-                            # Fix 5: Safe check_bus_pair with error handling
-                            try:
-                                is_trafo = check_bus_pair(df_line, df_trafo, (fbus, tbus))
-                                if is_trafo:
-                                    idx = trafo_idx_map.get((fbus, tbus))
-                                else:
-                                    idx = line_idx_map.get((fbus, tbus))
-                                if idx is not None:
-                                    weather_down_set.add(idx)
-                            except Exception as e:
-                                st.warning(f"Couldn't process line {fbus}-{tbus}: {str(e)}")
-                
+                        if selected_hour >= start_hr:
+                            if check_bus_pair(df_line, df_trafo, (fbus, tbus)):
+                                idx = trafo_idx_map.get((fbus, tbus))
+                            else:
+                                idx = line_idx_map.get((fbus, tbus))
+                            if idx is not None:
+                                weather_down_set.add(idx)
                 gdf["down_weather"] = gdf["idx"].apply(lambda i: i in weather_down_set)
                 
-                # Fix 6: Create map with explicit height/width
+                # Create map
                 m = folium.Map(location=[27.0, 66.5], zoom_start=7, width=800, height=600)
                 
-                # Color functions remain the same
+                # Color functions
                 def get_color(pct):
                     max_loading_capacity = st.session_state.get('max_loading_capacity', 100.0)
                     if pct is None or pct == 0:
@@ -2092,102 +2058,76 @@ if st.session_state.bau_results is not None:
                     else:
                         return '#FF0000'
                 
-                # Fix 7: More robust style function with error checking
+                # Style function
                 def style_function(feature):
-                    try:
-                        props = feature['properties']
-                        if props.get("down_weather", False):
-                            return {'color': '#000000', 'weight': 3}
-                        
-                        idx = props.get('idx')
-                        if idx is None:
-                            return {'color': '#CCCCCC', 'weight': 2}  # Default gray
-                            
-                        pct = props.get("loading", 0.0)
-                        is_trafo = idx >= no_of_lines and df_trafo is not None
-                        color = get_color_trafo(pct) if is_trafo else get_color(pct)
-                        return {'color': color, 'weight': 3}
-                    except Exception:
-                        return {'color': '#CCCCCC', 'weight': 1}  # Default for errors
+                    props = feature['properties']
+                    if props.get("down_weather", False):
+                        return {'color': '#000000', 'weight': 3}
+                    pct = props.get("loading", 0.0)
+                    color = get_color_trafo(pct) if props['idx'] >= no_of_lines and df_trafo is not None else get_color(pct)
+                    return {'color': color, 'weight': 3}
                 
-                # Fix 8: Convert GeoDataFrame to GeoJSON properly
-                geo_json = folium.GeoJson(
-                    data=gdf.to_json(),
-                    name=f'Transmission Net at Hour {hour_idx}',
+                # Add lines as GeoJSON
+                folium.GeoJson(
+                    gdf.__geo_interface__,
+                    name=f'Transmission Net at Hour {selected_hour}',
                     style_function=style_function
-                )
-                geo_json.add_to(m)
+                ).add_to(m)
                 
-                # Fix 9: Proper handling of load shedding circles
-                shedding_at_hr = [bus for (shed_hr, bus) in shedding_buses if shed_hr == hour_idx]
-                
+                # Add load shedding circles
+                shedding_at_hr = [bus for (shed_hr, bus) in shedding_buses if shed_hr == selected_hour]
                 for _, row in df_load.iterrows():
-                    try:
-                        bus = row['bus']
-                        coords_str = row['load_coordinates']
-                        
-                        # Handle different formats of coordinates
-                        if isinstance(coords_str, str):
-                            lat, lon = ast.literal_eval(coords_str)
-                        elif isinstance(coords_str, (list, tuple)) and len(coords_str) == 2:
-                            lat, lon = coords_str
-                        else:
-                            continue  # Skip if coords can't be parsed
-                            
+                    bus = row['bus']
+                    coords = row['load_coordinates']
+                    if isinstance(coords, str):
+                        lat, lon = ast.literal_eval(coords)
                         color = 'red' if bus in shedding_at_hr else 'green'
                         folium.Circle(
                             location=(lat, lon),
                             radius=20000,
                             color=color,
+                            fill=True,
                             fill_color=color,
-                            fill_opacity=0.5,
-                            tooltip=f"Bus {bus}"
+                            fill_opacity=0.5
                         ).add_to(m)
-                    except Exception as e:
-                        st.warning(f"Couldn't add load circle for bus {row.get('bus')}: {str(e)}")
                 
                 # Add legend
                 legend_html = """
-                <div style="position: fixed; top: 10px; right: 10px; z-index: 1000; background: white; padding: 8px; border: 1px solid #ccc;">
-                    <strong>Line Load Level (% of Max) and Load Status</strong><br>
-                    <span style="display: inline-block; width: 12px; height: 12px; background: #00FF00; margin-right: 6px;"></span>Below 75%<br>
-                    <span style="display: inline-block; width: 12px; height: 12px; background: #FFFF00; margin-right: 6px;"></span>75-90%<br>
-                    <span style="display: inline-block; width: 12px; height: 12px; background: #FFA500; margin-right: 6px;"></span>90-100%<br>
-                    <span style="display: inline-block; width: 12px; height: 12px; background: #FF0000; margin-right: 6px;"></span>Overloaded (>100%)<br>
-                    <span style="display: inline-block; width: 12px; height: 12px; background: #000000; margin-right: 6px;"></span>Weather Impacted<br>
-                    <span style="display: inline-block; width: 12px; height: 12px; background: #008000; border-radius: 50%; margin-right: 6px;"></span>Fully Served Load<br>
-                    <span style="display: inline-block; width: 12px; height: 12px; background: #FF0000; border-radius: 50%; margin-right: 6px;"></span>Not Fully Served Load
+                <div style="position: fixed; bottom: 50px; right: 10px; z-index: 1000; background-color: rgba(255, 255, 255, 0.9); padding: 10px; border: 2px solid black; font-size: 14px; color: black;">
+                    <b>Line Loading Information (%)</b><br>
+                    <i style="background: #00FF00; width: 18px; height: 18px; display: inline-block;"></i> Below 75%<br>
+                    <i style="background: #FFFF00; width: 18px; height: 18px; display: inline-block;"></i> 75-90%<br>
+                    <i style="background: #FFA500; width: 18px; height: 18px; display: inline-block;"></i> 90-100%<br>
+                    <i style="background: #FF0000; width: 18px; height: 18px; display: inline-block;"></i> Line Down (Above 100%)<br>
+                    <i style="background: #000000; width: 18px; height: 18px; display: inline-block;"></i> Line Down Due to Weather<br>
+                    <i style="background: #FF0000; width: 18px; height: 18px; display: inline-block; border-radius: 50%;"></i> Load Shed Area<br>
+                    <i style="background: #008000; width: 18px; height: 18px; display: inline-block; border-radius: 50%;"></i> Load Served Area
                 </div>
                 """
                 m.get_root().html.add_child(folium.Element(legend_html))
                 
-                # Add title
-                title_html = f"""
-                <div style="position: fixed; top: 10px; left: 10px; z-index: 1000; font-size: 18px; font-weight: bold; background: rgba(255,255,255,0.8); padding: 4px;">
-                    Business As Usual: Hour {hour_idx}
-                </div>
-                """
-                m.get_root().html.add_child(folium.Element(title_html))
+                # Add hour label
+                hour_label = f'<div style="font-size: 16px; font-weight: bold; color: black; background-color: rgba(255, 255, 255, 0.8); padding: 5px; border-radius: 3px;">Business As Usual System: Hour {selected_hour}</div>'
+                folium.Marker(
+                    location=[29.5, 64.5],  # Top-left corner
+                    icon=folium.DivIcon(html=hour_label)
+                ).add_to(m)
                 
-                # Add layer control
-                folium.LayerControl(collapsed=False).add_to(m)
-                
-                # Fix 10: Store and display map with different height params for stability
+                # Store map in session state and display
                 st.session_state.bau_map_obj = m
-                st.session_state.selected_hour = hour_idx
+                st.session_state.selected_hour = selected_hour
                 
-                # Fix 11: Render the map with st_folium with height/width explicitly set
-                st.write(f"### Network Loading Visualization - Hour {hour_idx}")
-                map_data = st_folium(m, width=800, height=600, key=f"bau_map_{hour_idx}")
-                
-                # Optional debug info
-                st.write(f"Map contains {len(gdf)} transmission elements and {len(df_load)} load buses")
+                # Use st_folium to render the map
+                st_folium(m, width=800, height=600, key=f"bau_map_{selected_hour}")
                 
             except Exception as e:
                 st.error(f"Error generating visualization: {str(e)}")
-                st.error(traceback.format_exc())        
-                    
-                    
+                st.error(traceback.format_exc())
+    
+    # If the map was already generated and stored, display it
+    elif st.session_state.bau_map_obj is not None and st.session_state.selected_hour == selected_hour:
+        st.write(f"### Network Loading Visualization - Hour {selected_hour}")
+        st_folium(st.session_state.bau_map_obj, width=800, height=600, key=f"bau_map_cached_{selected_hour}")                    
 
 
 
