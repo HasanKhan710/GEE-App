@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import random
 import geemap
 import numpy as np
+import math
 
 # Set page configuration
 st.set_page_config(
@@ -1526,7 +1527,7 @@ elif selection == "Business As Usual":
         if a is None: return a
         is_single = isinstance(a, (int, float))
         a = [a] if is_single else a
-        if all(item < 2.5 for item in a if isinstance(item, (int, float))):
+        if all(isinstance(item, (int, float)) and item < 2.5 for item in a):
             a = [item * 100 for item in a]
         return a[0] if is_single else a
 
