@@ -201,7 +201,7 @@ def overloaded_transformer(net, max_loading_capacity_transformer):
                     overloaded.append(idx)
     return overloaded
 
-def initialize_network(df_bus, df_load, df_gen, df_line, df_trafo, df_load_profile, df_gen_profile):
+def initialize_network():
     net = pp.create_empty_network()
     for idx, row in df_bus.iterrows():
         pp.create_bus(net,
