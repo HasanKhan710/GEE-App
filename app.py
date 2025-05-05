@@ -1977,10 +1977,35 @@ elif selection == "Business As Usual":
                     st.error(traceback.format_exc())
         
 # This is the fixed visualization section for your Business As Usual page
-# Replace the visualization section in the "Business As Usual" page with this code
+# Replace the visualization section in the 
 
-# Visualization
-# Visualization
+        if st.session_state.bau_results is not None:
+            st.subheader("Day End Summary")
+            cumulative_load_shedding = st.session_state.bau_results['cumulative_load_shedding']
+            total_demand_per_bus = st.session_state.bau_results['total_demand_per_bus']
+            if any(v["p_mw"] > 0 or v["q_mvar"] > 0 for v in cumulative_load_shedding.values()):
+                summary_data = []
+                for bus, shed in cumulative_load_shedding.items():
+                    total = total_demand_per_bus.get(bus, {"p_mw": 0.0, "q_mvar": 0.0})
+                    summary_data.append({
+                        "Bus": bus,
+                        "Load Shedding (MWh)": round(shed['p_mw'], 2),
+                        "Load Shedding (MVARh)": round(shed['q_mvar'], 2),
+                        "Total Demand (MWh)": round(total['p_mw'], 2),
+                        "Total Demand (MVARh)": round(total['q_mvar'], 2)
+                    })
+                summary_df = pd.DataFrame(summary_data)
+                st.dataframe(summary_df, use_container_width=True)
+            else:
+                st.success("No load shedding occurred today.")
+            
+            st.write("### Hourly Generation Costs")
+            business_as_usual_cost = st.session_state.bau_results['business_as_usual_cost']
+            cost_data = [{"Hour": i, "Cost (PKR)": round(cost, 2)} for i, cost in enumerate(business_as_usual_cost)]
+            cost_df = pd.DataFrame(cost_data)
+            st.dataframe(cost_df, use_container_width=True)
+
+        # Visualization
         st.subheader("Visualize Business As Usual") # CHANGED: Removed "Using GEE" as visualization uses Folium
         if st.session_state.bau_results is None:
             st.info("Please run the Business As Usual analysis first.")
@@ -2123,12 +2148,6 @@ elif selection == "Business As Usual":
                     except Exception as e:
                         st.error(f"Error generating visualization: {str(e)}")
                         st.error(traceback.format_exc())
-
-    
-    # If the map was already generated and stored, display it
-    elif st.session_state.bau_map_obj is not None and st.session_state.selected_hour == selected_hour:
-        st.write(f"### Network Loading Visualization - Hour {selected_hour}")
-        st_folium(st.session_state.bau_map_obj, width=800, height=600, key=f"bau_map_cached_{selected_hour}")                    
 
 
 
