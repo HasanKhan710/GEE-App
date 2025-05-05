@@ -1498,30 +1498,28 @@ elif selection == "Business As Usual":
     # Helper functions adapted for Streamlit file handling
     def check_bus_pair(file_content, bus_pair):
         """Check if bus pair is a transformer or line"""
-        file_content.seek(0)
-        xls = pd.ExcelFile(file_content)
-        
+        file_content.seek(0)  
+        xls = pd.ExcelFile(path)
         if "Transformer Parameters" in xls.sheet_names:
-            transformer_df = pd.read_excel(file_content, sheet_name='Transformer Parameters')
-            line_df = pd.read_excel(file_content, sheet_name='Line Parameters')
-            file_content.seek(0)
-            
-            from_bus, to_bus = bus_pair
-            transformer_match = (
-                ((transformer_df['hv_bus'] == from_bus) & 
-                (transformer_df['lv_bus'] == to_bus)) | (
-                (transformer_df['hv_bus'] == to_bus) & 
-                (transformer_df['lv_bus'] == from_bus))
-            
-            line_match = (
-                ((line_df['from_bus'] == from_bus) & 
-                (line_df['to_bus'] == to_bus)) | (
-                (line_df['from_bus'] == to_bus) & 
-                (line_df['to_bus'] == from_bus))
-            
-            if transformer_match.any(): return True
-            if line_match.any(): return False
-        return None
+          transformer_df = pd.read_excel(path, sheet_name='Transformer Parameters')
+          line_df = pd.read_excel(path, sheet_name='Line Parameters')
+    
+          from_bus, to_bus = bus_pair  # unpack single tuple
+    
+          transformer_match = (
+              ((transformer_df['hv_bus'] == from_bus) & (transformer_df['lv_bus'] == to_bus)) |
+              ((transformer_df['hv_bus'] == to_bus) & (transformer_df['lv_bus'] == from_bus))  ).any()
+    
+          line_match = (
+                ((line_df['from_bus'] == from_bus) & (line_df['to_bus'] == to_bus)) |
+                ((line_df['from_bus'] == to_bus) & (line_df['to_bus'] == from_bus)) ).any()
+    
+          if transformer_match:
+              return True
+          if line_match:
+              return False
+              
+      return None  # If no match in either
 
     def transform_loading(a):
         """Transform loading percentages for display"""
