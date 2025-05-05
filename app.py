@@ -1009,7 +1009,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
                         daily_dfs = {}
                         results_per_day = []
                         max_times = []
-                        risk_scores = []
+                        risk_sc = []
 
                         # Process forecast for next 24 hours
                         future = nearest_gfs_time + timedelta(hours=24)
@@ -1086,7 +1086,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
 
                         data = []
                         daily_results = []
-                        risk_scores = []
+                        risk_sc = []
 
                         for feature in results["features"]:
                             props = feature["properties"]
@@ -1095,7 +1095,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
                             from_bus = df.loc[line_id, "from_bus"]
                             to_bus = df.loc[line_id, "to_bus"]
                             daily_results.append((int(from_bus), int(to_bus), int(max_risk)))
-                            risk_scores.append(max_risk)   # Extra Line Added
+                            risk_sc.append(max_risk)   # Extra Line Added
 
                             data.append({
                                 "line_id": props["line_id"],
@@ -1132,14 +1132,14 @@ elif selection == "Weather Risk Visualisation Using GEE":
                             "risk_scores": risk_scores
                         }
 
-                        return m, daily_dfs["Day_1"], line_outage_data, outage_data, max_occurrence_t, max_occurrence_p, max_occurrence_w, risk_scores
+                        return m, daily_dfs["Day_1"], line_outage_data, outage_data, max_occurrence_t, max_occurrence_p, max_occurrence_w, risk_sc
 
                     # Call the function with selected parameters
                     weather_map, risk_df, line_outage_data, outage_data, max_occurrence_t, max_occurrence_p, max_occurrence_w = process_temperature(
                         intensity,
                         study_period,
                         risk_score,
-                        risk_scores,
+                        risk_sc,
                         st.session_state.network_data['df_line']
                     )
 
