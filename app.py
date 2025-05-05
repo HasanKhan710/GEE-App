@@ -1761,7 +1761,7 @@ elif selection == "Business As Usual":
                             
         
                     def run_bau_simulation(net, load_dynamic, gen_dynamic, num_hours, line_outages, max_loading_capacity, max_loading_capacity_transformer):
-                        business_as_usual_cost = calculate_hourly_cost(net, load_dynamic, gen_dynamic, num_hours)
+                        business_as_usual_cost = calculate_hourly_cost(net, load_dynamic, gen_dynamic, num_hours, df_load_profile, df_gen_profile)
                         cumulative_load_shedding = {bus: {"p_mw": 0.0, "q_mvar": 0.0} for bus in net.load["bus"].unique()}
                         total_demand_per_bus = {}
                         p_cols = [c for c in df_load_profile.columns if c.startswith("p_mw_bus_")]
@@ -1908,8 +1908,8 @@ elif selection == "Business As Usual":
                                 hourly_shed_bau, served_load_per_hour, gen_per_hour_bau, slack_per_hour_bau,
                                 loading_percent_bau, shedding_buses)
                     
-                    # Initialize network
-                    net, load_dynamic, gen_dynamic = initialize_network()
+                    # CHANGED: Pass required arguments to initialize_network
+                    net, load_dynamic, gen_dynamic = initialize_network(df_bus, df_load, df_gen, df_line, df_trafo, df_load_profile, df_gen_profile)
                     num_hours = len(df_load_profile)
                     
                     # Create index maps
