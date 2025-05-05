@@ -1806,10 +1806,11 @@ if selection == "Business As Usual":
                     df_lines["geodata"] = df_lines["geodata"].apply(lambda x: [(lon, lat) for lat, lon in eval(x)] if isinstance(x, str) else x)
                     max_loading_capacity = max(df_lines['max_loading_percent'].dropna().tolist())
                     gdf_lines = gpd.GeoDataFrame(df_lines, geometry=[LineString(coords) for coords in df_lines["geodata"]], crs="EPSG:4326")
+                    gdf_lines['pp_index'] = net.line.index.tolist()  # Map to pandapower indices
                     
                     # GeoDataFrame for transformers
                     gdf_transformers = None
-                    if df_trafo is not None:# Populate bus_coords with properly parsed coordinates
+                    if df_trafo is not None:
                         bus_coords = {}
                         for idx, row in df_line.iterrows():
                             if isinstance(row["geodata"], str):
@@ -1828,7 +1829,6 @@ if selection == "Business As Usual":
                                 if isinstance(to_coord, tuple) and len(to_coord) == 2 and all(isinstance(x, (int, float)) for x in to_coord):
                                     bus_coords[row["to_bus"]] = to_coord
                         
-                        # Create transformer geometries
                         trafo_geometries = []
                         for idx, row in df_trafo.iterrows():
                             hv_bus = row["hv_bus"]
@@ -1843,6 +1843,7 @@ if selection == "Business As Usual":
                             else:
                                 trafo_geometries.append(None)
                         gdf_transformers = gpd.GeoDataFrame(df_trafo, geometry=trafo_geometries, crs="EPSG:4326")
+                        gdf_transformers['pp_index'] = net.trafo.index.tolist()  # Map to pandapower indices
                         max_loading_capacity_transformer = max(df_trafo['max_loading_percent'].dropna().tolist())
                     
                     # Load data for visualization
@@ -1996,7 +1997,7 @@ if selection == "Business As Usual":
                         gen_per_hour_bau.append(net.res_gen["p_mw"].tolist() if not net.res_gen["p_mw"].isnull().any() else [None] * len(net.res_gen))
                         slack_per_hour_bau.append(float(net.res_ext_grid.at[0, "p_mw"]))
                     
-                    # Store results
+                    # Store results with total_demand_per_bus
                     st.session_state.bau_results = {
                         "line_loading_records": line_loading_records,
                         "trafo_loading_records": trafo_loading_records,
@@ -2010,38 +2011,42 @@ if selection == "Business As Usual":
                         "cumulative_load_shedding": cumulative_load_shedding,
                         "business_as_usual_cost": business_as_usual_cost,
                         "hourly_line_outages": hourly_line_outages,
-                        "hourly_trafo_outages": hourly_trafo_outages
+                        "hourly_trafo_outages": hourly_trafo_outages,
+                        "total_demand_per_bus": total_demand_per_bus  # Added
                     }
-                    
-                    # Day-End Summary
-                    st.subheader("Day-End Summary")
-                    if any(v["p_mw"] > 0 or v["q_mvar"] > 0 for v in cumulative_load_shedding.values()):
-                        st.write("Load shedding occurred at the following load buses:")
-                        shedding_data = []
-                        for bus, shed in cumulative_load_shedding.items():
-                            total = total_demand_per_bus.get(bus, {"p_mw": 0.0, "q_mvar": 0.0})
-                            shedding_data.append({
-                                "Load Bus": bus,
-                                "Total Load Shed (MWh)": round(shed['p_mw'], 2),
-                                "Total Reactive Load Shed (MVARh)": round(shed['q_mvar'], 2),
-                                "Total Demand (MWh)": round(total['p_mw'], 2),
-                                "Total Reactive Demand (MVARh)": round(total['q_mvar'], 2)
-                            })
-                        shedding_df = pd.DataFrame(shedding_data)
-                        st.dataframe(shedding_df, use_container_width=True)
-                    else:
-                        st.write("No load shedding occurred today.")
-                    
-                    # Hourly Costs
-                    st.subheader("Hourly Generation Cost (PKR)")
-                    cost_data = [{"Hour": i, "Cost (PKR)": round(cost, 2) if cost != 0 else 0} for i, cost in enumerate(business_as_usual_cost)]
-                    cost_df = pd.DataFrame(cost_data)
-                    st.dataframe(cost_df, use_container_width=True)
                 
                 except Exception as e:
                     st.error(f"Error running Business As Usual analysis: {str(e)}")
                     import traceback
                     st.error(traceback.format_exc())
+        
+        # Display results if available
+        if "bau_results" in st.session_state:
+            st.subheader("Day-End Summary")
+            cumulative_load_shedding = st.session_state.bau_results["cumulative_load_shedding"]
+            total_demand_per_bus = st.session_state.bau_results["total_demand_per_bus"]
+            if any(v["p_mw"] > 0 or v["q_mvar"] > 0 for v in cumulative_load_shedding.values()):
+                st.write("Load shedding occurred at the following load buses:")
+                shedding_data = []
+                for bus, shed in cumulative_load_shedding.items():
+                    total = total_demand_per_bus.get(bus, {"p_mw": 0.0, "q_mvar": 0.0})
+                    shedding_data.append({
+                        "Load Bus": bus,
+                        "Total Load Shed (MWh)": round(shed['p_mw'], 2),
+                        "Total Reactive Load Shed (MVARh)": round(shed['q_mvar'], 2),
+                        "Total Demand (MWh)": round(total['p_mw'], 2),
+                        "Total Reactive Demand (MVARh)": round(total['q_mvar'], 2)
+                    })
+                shedding_df = pd.DataFrame(shedding_data)
+                st.dataframe(shedding_df, use_container_width=True)
+            else:
+                st.write("No load shedding occurred today.")
+            
+            st.subheader("Hourly Generation Cost (PKR)")
+            business_as_usual_cost = st.session_state.bau_results["business_as_usual_cost"]
+            cost_data = [{"Hour": i, "Cost (PKR)": round(cost, 2) if cost != 0 else 0} for i, cost in enumerate(business_as_usual_cost)]
+            cost_df = pd.DataFrame(cost_data)
+            st.dataframe(cost_df, use_container_width=True)
         
         # Visualization
         if "bau_results" in st.session_state:
@@ -2060,15 +2065,21 @@ if selection == "Business As Usual":
                         load_df = st.session_state.bau_results["load_df"]
                         shedding_buses = st.session_state.bau_results["shedding_buses"]
                         
-                        # Prepare GeoDataFrames
+                        # Prepare GeoDataFrames with pandapower indices
                         gdf_lines_hour = gdf_lines.copy()
-                        gdf_lines_hour["loading"] = [line_loading[i] if i not in line_out_set else None for i in range(len(gdf_lines))]
-                        gdf_lines_hour["down"] = [i in line_out_set for i in range(len(gdf_lines))]
+                        gdf_lines_hour["loading"] = [
+                            None if pp_idx in line_out_set else line_loading[pp_idx]
+                            for pp_idx in gdf_lines['pp_index']
+                        ]
+                        gdf_lines_hour["down"] = [pp_idx in line_out_set for pp_idx in gdf_lines['pp_index']]
                         
                         if gdf_transformers is not None:
                             gdf_transformers_hour = gdf_transformers.copy()
-                            gdf_transformers_hour["loading"] = [trafo_loading[i] if i not in trafo_out_set else None for i in range(len(gdf_transformers))]
-                            gdf_transformers_hour["down"] = [i in trafo_out_set for i in range(len(gdf_transformers))]
+                            gdf_transformers_hour["loading"] = [
+                                None if pp_idx in trafo_out_set else trafo_loading[pp_idx]
+                                for pp_idx in gdf_transformers['pp_index']
+                            ]
+                            gdf_transformers_hour["down"] = [pp_idx in trafo_out_set for pp_idx in gdf_transformers['pp_index']]
                             gdf_all = pd.concat([gdf_lines_hour.assign(type='line'), gdf_transformers_hour.assign(type='transformer')], ignore_index=True)
                         else:
                             gdf_all = gdf_lines_hour.assign(type='line')
