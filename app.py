@@ -1589,8 +1589,22 @@ elif selection == "Business As Usual":
                             return []
                         no_of_lines_in_network = len(df_line) - 1
                         capped_limit = math.floor(0.2 * no_of_lines_in_network)
-                        # Extract numeric risk score from dictionary
-                        numeric_risk_scores = [rs['score'] if isinstance(rs, dict) and 'score' in rs else rs for rs in risk_scores]
+                        # Debug: Log risk_scores structure
+                        st.write("Debug: risk_scores =", risk_scores)
+                        # Extract numeric risk scores
+                        def extract_risk(rs):
+                            if isinstance(rs, (int, float)):
+                                return float(rs)
+                            elif isinstance(rs, dict):
+                                for key in ['score', 'risk', 'value']:  # Common keys
+                                    if key in rs and isinstance(rs[key], (int, float)):
+                                        return float(rs[key])
+                                    elif key in rs and isinstance(rs[key], str) and rs[key].replace('.', '', 1).isdigit():
+                                        return float(rs[key])
+                            elif isinstance(rs, str) and rs.replace('.', '', 1).isdigit():
+                                return float(rs)
+                            return 0.0  # Default for invalid entries
+                        numeric_risk_scores = [extract_risk(rs) for rs in risk_scores]
                         combined = [(line[0], line[1], hour, risk) for line, hour, risk in zip(line_down, outage_hours, numeric_risk_scores)]
                         sorted_combined = sorted(combined, key=lambda x: x[-1], reverse=True)
                         line_outages = [(line[0], line[1], line[2]) for line in sorted_combined]
