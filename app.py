@@ -1029,9 +1029,9 @@ elif selection == "Weather Risk Visualisation Using GEE":
                     if use_dummy_data:
                         # Hardcoded dummy data based on provided output
                         line_outage_data = {
-                            "lines": [(0, 4), (1, 4), (3, 4), (5, 12), (11, 12), (4, 5)],
-                            "hours": [14, 13, 11, 13, 13, 15],
-                            "risk_scores": [16, 16, 16, 16, 14, 16]
+                            "lines": [(0,4), (0,1), (1,6), (3,7), (9,14)],
+                            "hours": [15, 12, 11, 10, 16],
+                            "risk_scores": [12, 14, 11, 10, 15]
                         }
                         max_occurrences = {
                             "temperature": 983,
@@ -1039,18 +1039,17 @@ elif selection == "Weather Risk Visualisation Using GEE":
                             "wind": 69
                         }
                         risk_df = pd.DataFrame({
-                            "line_id": [0, 1, 2, 3, 4, 5],
-                            "from_bus": [0, 1, 3, 5, 11, 4],
-                            "to_bus": [4, 4, 4, 12, 12, 5],
-                            "risk_score": [16, 16, 16, 16, 14, 16]
+                            "line_id": [0, 1, 2, 3, 4],
+                            "from_bus": [0, 0, 1, 3, 9],
+                            "to_bus": [4, 1, 6, 7, 14],
+                            "risk_score": [12, 14, 11, 10, 15]
                         })
                         outage_data = [
-                            {"line": "From Bus 0 to Bus 4", "outage_hours": 14, "risk_score": 16},
-                            {"line": "From Bus 1 to Bus 4", "outage_hours": 13, "risk_score": 16},
-                            {"line": "From Bus 3 to Bus 4", "outage_hours": 11, "risk_score": 16},
-                            {"line": "From Bus 5 to Bus 12", "outage_hours": 13, "risk_score": 16},
-                            {"line": "From Bus 11 to Bus 12", "outage_hours": 13, "risk_score": 14},
-                            {"line": "From Bus 4 to Bus 5", "outage_hours": 15, "risk_score": 16}
+                            {"line": "From Bus 0 to Bus 4", "outage_hours": 15, "risk_score": 12},
+                            {"line": "From Bus 0 to Bus 1", "outage_hours": 12, "risk_score": 14},
+                            {"line": "From Bus 1 to Bus 6", "outage_hours": 11, "risk_score": 11},
+                            {"line": "From Bus 3 to Bus 7", "outage_hours": 10, "risk_score": 10},
+                            {"line": "From Bus 9 to Bus 14", "outage_hours": 16, "risk_score": 15}
                         ]
                         weather_map = folium.Map(location=[30, 70], zoom_start=5, width=800, height=600)
                     else:
