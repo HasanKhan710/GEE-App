@@ -484,8 +484,6 @@ if selection == "Network Initialization":
 
     if uploaded_file is None and not st.session_state.show_results:
         st.info("Please upload an Excel file to proceed.")
-
-# Page 2: Weather Risk Visualisation Using GEE
 elif selection == "Weather Risk Visualisation Using GEE":
     st.title("Weather Risk Visualisation Using GEE")
 
@@ -535,6 +533,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
                         initialize_ee()
                     except Exception as e:
                         st.error(f"Error initializing Earth Engine: {str(e)}")
+                        st.stop()
 
                     # Process temperature and generate results
                     def process_temperature(intensity, study_period, risk_score_threshold, df_line):
@@ -557,9 +556,13 @@ elif selection == "Weather Risk Visualisation Using GEE":
                         line_geometries = [LineString(coords) for coords in df["geodata"]]
                         gdf = gpd.GeoDataFrame(df, geometry=line_geometries, crs="EPSG:4326")
 
-                        # Create map and add transmission lines
-                        m = geemap.Map(center=[30, 70], zoom=5)
-                        m.add_gdf(gdf, layer_name="Transmission Lines", style={"color": "blue", "weight": 2})
+                        # Create Folium map instead of geemap.Map
+                        m = folium.Map(location=[30, 70], zoom_start=5, width=800, height=600)
+                        folium.GeoJson(
+                            gdf,
+                            name="Transmission Lines",
+                            style_function=lambda x: {"color": "blue", "weight": 2}
+                        ).add_to(m)
 
                         # Define date range (last 10 years)
                         end_date = datetime.now()
@@ -590,8 +593,8 @@ elif selection == "Weather Risk Visualisation Using GEE":
                         # Ensure dataset contains required band
                         first_img = dataset.first()
                         band_names = first_img.bandNames().getInfo()
-                        if temp_band and precip_band not in band_names:
-                            raise ValueError(f"Dataset does not contain band: {temp_band}. Available bands: {band_names}")
+                        if temp_band not in band_names or precip_band not in band_names:
+                            raise ValueError(f"Dataset does not contain required bands: {temp_band}, {precip_band}. Available bands: {band_names}")
 
                         # Convert temperature from Kelvin to Celsius and filter occurrences above threshold
                         dataset1 = dataset.map(lambda img: img.select(temp_band).subtract(273.15).rename("temp_C"))
@@ -604,11 +607,11 @@ elif selection == "Weather Risk Visualisation Using GEE":
                         dataset4 = dataset.map(lambda img: img.select(v_wind_band).rename("v_wind"))
 
                         wind_magnitude = dataset.map(lambda img: img.expression(
-                        "sqrt(pow(u, 2) + pow(v, 2))",
-                        {
-                            "u": img.select(u_wind_band),
-                            "v": img.select(v_wind_band)
-                        }
+                            "sqrt(pow(u, 2) + pow(v, 2))",
+                            {
+                                "u": img.select(u_wind_band),
+                                "v": img.select(v_wind_band)
+                            }
                         ).rename("wind_magnitude"))
 
                         filtered_wind = wind_magnitude.map(lambda img: img.gt(thresholds_w[intensity]))
@@ -620,10 +623,10 @@ elif selection == "Weather Risk Visualisation Using GEE":
 
                         # Convert transmission lines to FeatureCollection
                         features = [
-                        ee.Feature(ee.Geometry.LineString(row["geodata"]), {
-                            "line_id": i,
-                            "geodata": str(row["geodata"])
-                        }) for i, row in df.iterrows()
+                            ee.Feature(ee.Geometry.LineString(row["geodata"]), {
+                                "line_id": i,
+                                "geodata": str(row["geodata"])
+                            }) for i, row in df.iterrows()
                         ]
                         line_fc = ee.FeatureCollection(features)
 
@@ -666,23 +669,9 @@ elif selection == "Weather Risk Visualisation Using GEE":
                         stats_dict_p = stats_p.getInfo()
                         stats_dict_w = stats_w.getInfo()
 
-                        if stats_dict_t:
-                            max_occurrence_key_t = list(stats_dict_t.keys())[0]
-                            max_occurrence_t = ee.Number(stats_t.get(max_occurrence_key_t)).getInfo()
-                        else:
-                            max_occurrence_t = 1
-
-                        if stats_dict_p:
-                            max_occurrence_key_p = list(stats_dict_p.keys())[0]
-                            max_occurrence_p = ee.Number(stats_p.get(max_occurrence_key_p)).getInfo()
-                        else:
-                            max_occurrence_p = 1
-
-                        if stats_dict_w:
-                            max_occurrence_key_w = list(stats_dict_w.keys())[0]
-                            max_occurrence_w = ee.Number(stats_w.get(max_occurrence_key_w)).getInfo()
-                        else:
-                            max_occurrence_w = 1
+                        max_occurrence_t = ee.Number(stats_dict_t.get(list(stats_dict_t.keys())[0], 1)).getInfo()
+                        max_occurrence_p = ee.Number(stats_dict_p.get(list(stats_dict_p.keys())[0], 1)).getInfo()
+                        max_occurrence_w = ee.Number(stats_dict_w.get(list(stats_dict_w.keys())[0], 1)).getInfo()
 
                         mid1_t = max_occurrence_t / 3
                         mid2_t = 2 * (max_occurrence_t / 3)
@@ -691,10 +680,10 @@ elif selection == "Weather Risk Visualisation Using GEE":
                         mid1_w = max_occurrence_w / 3
                         mid2_w = 2 * (max_occurrence_w / 3)
 
-                        mid1_ft = thresholds[intensity]*(1-10/100)
-                        mid2_ft = thresholds[intensity]*(1-20/100)
-                        mid1_fw = thresholds_w[intensity]*(1-10/100)
-                        mid2_fw = thresholds_w[intensity]*(1-20/100)
+                        mid1_ft = thresholds[intensity] * (1 - 10 / 100)
+                        mid2_ft = thresholds[intensity] * (1 - 20 / 100)
+                        mid1_fw = thresholds_w[intensity] * (1 - 10 / 100)
+                        mid2_fw = thresholds_w[intensity] * (1 - 20 / 100)
 
                         now = datetime.utcnow()
                         nearest_gfs_time = now.replace(hour=(now.hour // 6) * 6, minute=0, second=0, microsecond=0)
@@ -750,42 +739,51 @@ elif selection == "Weather Risk Visualisation Using GEE":
                         combined_layer = combined_layer.updateMask(land_image)
 
                         combined_viz = {
-                        'min': 6,
-                        'max': 18,
-                        'palette': [
-                            '#32CD32',  # 6 - Lime Green
-                            '#50C878',  # 7 - Medium Sea Green
-                            '#66CC66',  # 8 - Soft Green
-                            '#B2B200',  # 9 - Olive Green
-                            '#CCCC00',  # 10 - Yellow-Green
-                            '#E6B800',  # 11 - Mustard Yellow
-                            '#FFD700',  # 12 - Golden Yellow
-                            '#FFCC00',  # 13 - Deep Yellow
-                            '#FFA500',  # 14 - Orange
-                            '#FF9933',  # 15 - Dark Orange
-                            '#FF6600',  # 16 - Reddish Orange
-                            '#FF0000'   # 18 - Red
-                        ]
+                            'min': 6,
+                            'max': 18,
+                            'palette': [
+                                '#32CD32',  # 6 - Lime Green
+                                '#50C878',  # 7 - Medium Sea Green
+                                '#66CC66',  # 8 - Soft Green
+                                '#B2B200',  # 9 - Olive Green
+                                '#CCCC00',  # 10 - Yellow-Green
+                                '#E6B800',  # 11 - Mustard Yellow
+                                '#FFD700',  # 12 - Golden Yellow
+                                '#FFCC00',  # 13 - Deep Yellow
+                                '#FFA500',  # 14 - Orange
+                                '#FF9933',  # 15 - Dark Orange
+                                '#FF6600',  # 16 - Reddish Orange
+                                '#FF0000'   # 18 - Red
+                            ]
                         }
 
                         vis_params = {
-                        'min': 3,
-                        'max': 9,
-                        'palette': ['lightgreen', 'green', 'yellow', 'orange', 'red', 'crimson', 'darkred']
+                            'min': 3,
+                            'max': 9,
+                            'palette': ['lightgreen', 'green', 'yellow', 'orange', 'red', 'crimson', 'darkred']
                         }
 
-                        m.addLayer(classified_t, classified_viz, f"Temperature Occurrence Classification ({study_period})")
-                        m.addLayer(classified_p, classified_viz, f"Precipitation Occurrence Classification ({study_period})")
-                        m.addLayer(classified_w, classified_viz, f"Wind Occurrence Classification ({study_period})")
-                        m.addLayer(combined_layer, vis_params, "Combined Historic Classification")
+                        # Add layers to Folium map using ee_layer
+                        def add_ee_layer(map_obj, ee_image, vis_params, name):
+                            map_id_dict = ee.Image(ee_image).getMapId(vis_params)
+                            folium.raster_layers.TileLayer(
+                                tiles=map_id_dict['tile_fetcher'].url_format,
+                                attr='Google Earth Engine',
+                                name=name,
+                                overlay=True,
+                                control=True
+                            ).add_to(map_obj)
+
+                        add_ee_layer(m, classified_t, classified_viz, f"Temperature Occurrence Classification ({study_period})")
+                        add_ee_layer(m, classified_p, classified_viz, f"Precipitation Occurrence Classification ({study_period})")
+                        add_ee_layer(m, classified_w, classified_viz, f"Wind Occurrence Classification ({study_period})")
+                        add_ee_layer(m, combined_layer, vis_params, "Combined Historic Classification")
 
                         fut = [latest_timestamp]
 
                         daily_dfs = {}
 
                         results_per_day = []
-
-                        max_times = []
 
                         risk_scores = []
 
@@ -844,12 +842,12 @@ elif selection == "Weather Risk Visualisation Using GEE":
                             combined_forecast = combined_forecast.add(combined_layer)
                             combined_forecast = combined_forecast.updateMask(land_image)
 
-                            m.addLayer(combined_forecast, combined_viz, f"Day Ahead - Risk Score")
+                            add_ee_layer(m, combined_forecast, combined_viz, f"Day Ahead - Risk Score")
 
                             reduced = combined_forecast.reduceRegions(
-                            collection=line_fc,
-                            reducer=ee.Reducer.max(),
-                            scale=1000
+                                collection=line_fc,
+                                reducer=ee.Reducer.max(),
+                                scale=1000
                             )
 
                             results = reduced.getInfo()
@@ -864,7 +862,6 @@ elif selection == "Weather Risk Visualisation Using GEE":
                                 from_bus = df.loc[line_id, "from_bus"]
                                 to_bus = df.loc[line_id, "to_bus"]
                                 daily_results.append((int(from_bus), int(to_bus), int(max_risk)))
-                                results_per_day.append(daily_results)
                                 risk_scores.append(max_risk)
                                 data.append({
                                     "line_id": props["line_id"],
@@ -874,10 +871,13 @@ elif selection == "Weather Risk Visualisation Using GEE":
 
                             daily_dfs[f"Day_{i}"] = pd.DataFrame(data)
 
-                        day_1_results = results_per_day[0]
+                        day_1_results = daily_results
                         filtered_lines_day1 = [(from_bus, to_bus) for from_bus, to_bus, score in day_1_results if score >= risk_score_threshold]
                         length_lines = len(filtered_lines_day1)
                         outage_hour_day = [random.randint(11, 15) for _ in range(length_lines)]
+
+                        # Add layer control to the map
+                        folium.LayerControl(collapsed=False).add_to(m)
 
                         return m, filtered_lines_day1, outage_hour_day, risk_scores, max_occurrence_t, max_occurrence_p, max_occurrence_w
 
@@ -891,7 +891,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
 
                     # Store the map and data in session state
                     st.session_state.weather_map_obj = weather_map
-                    st.session_state.line_outage_data = {"lines": line_down, "hours": outage_hours, "risk_scores": risk_scores}
+                    st.session_state.line_outage_data = {"lines": line_down, "hours": outage_hours}
                     st.session_state.risk_scores = risk_scores
                     st.session_state.max_occurrence_t = max_occurrence_t
                     st.session_state.max_occurrence_p = max_occurrence_p
@@ -903,7 +903,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
                     # Display the map
                     st.write("### Geographic Risk Visualization")
                     if st.session_state.weather_map_obj:
-                        st_folium(st.session_state.weather_map_obj.to_streamlit(), width=800, height=600, key="weather_map")
+                        st_folium(st.session_state.weather_map_obj, width=800, height=600, key="weather_map")
 
                     # Display legends
                     st.write("### Risk Classification Legends")
@@ -913,8 +913,8 @@ elif selection == "Weather Risk Visualisation Using GEE":
                     final_risk_score = {
                         "title": "Final Risk Score (6-18)",
                         "colors": [('#32CD32', '6'), ('#50C878', '7'), ('#66CC66', '8'), ('#B2B200', '9'),
-                                ('#CCCC00', '10'), ('#E6B800', '11'), ('#FFD700', '12'), ('#FFCC00', '13'),
-                                ('#FFA500', '14'), ('#FF9933', '15'), ('#FF6600', '16'), ('#FF0000', '18')]
+                                   ('#CCCC00', '10'), ('#E6B800', '11'), ('#FFD700', '12'), ('#FFCC00', '13'),
+                                   ('#FFA500', '14'), ('#FF9933', '15'), ('#FF6600', '16'), ('#FF0000', '18')]
                     }
 
                     historical_classification = {
@@ -925,7 +925,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
                     historical_score = {
                         "title": "Historical Risk Score (3-9)",
                         "colors": [('lightgreen', '3'), ('green', '4'), ('yellow', '5'), ('orange', '6'),
-                                ('red', '7'), ('crimson', '8'), ('darkred', '9')]
+                                   ('red', '7'), ('crimson', '8'), ('darkred', '9')]
                     }
 
                     fig = plt.figure(figsize=(5, 3))
@@ -936,21 +936,21 @@ elif selection == "Weather Risk Visualisation Using GEE":
                     ax1.set_title(final_risk_score["title"], fontsize=9, fontweight='bold', color='white', loc='left')
                     handles1 = [Patch(color=color, label=label) for color, label in final_risk_score["colors"]]
                     ax1.legend(handles=handles1, loc='center left', frameon=False,
-                            handleheight=1.2, handlelength=8, fontsize=9, labelcolor='white')
+                               handleheight=1.2, handlelength=8, fontsize=9, labelcolor='white')
 
                     ax2 = fig.add_subplot(gs[0, 1])
                     ax2.axis('off')
                     ax2.set_title(historical_classification["title"], fontsize=9, fontweight='bold', color='white')
                     handles2 = [Patch(color=color, label=label) for color, label in historical_classification["colors"]]
                     ax2.legend(handles=handles2, loc='center', ncol=3, frameon=False,
-                            handleheight=1.2, handlelength=5, fontsize=9, labelcolor='white')
+                               handleheight=1.2, handlelength=5, fontsize=9, labelcolor='white')
 
                     ax3 = fig.add_subplot(gs[1, 1])
                     ax3.axis('off')
                     ax3.set_title(historical_score["title"], fontsize=9, fontweight='bold', color='white')
                     handles3 = [Patch(color=color, label=label) for color, label in historical_score["colors"]]
                     ax3.legend(handles=handles3, loc='center', ncol=3, frameon=False,
-                            handleheight=1.2, handlelength=5, fontsize=9, labelcolor='white')
+                               handleheight=1.2, handlelength=5, fontsize=9, labelcolor='white')
 
                     fig.patch.set_facecolor('black')
                     plt.tight_layout(pad=1)
@@ -967,12 +967,22 @@ elif selection == "Weather Risk Visualisation Using GEE":
                     # Display lines expected to face outage based on threshold
                     if line_down:
                         st.write(f"### Lines Expected to Face Outage (Risk Score ≥ {risk_score})")
-                        outage_df = pd.DataFrame({
-                            "From Bus": [line[0] for line in line_down],
-                            "To Bus": [line[1] for line in line_down],
-                            "Outage Hour": outage_hours,
-                            "Risk Score": [score for score in risk_scores if any((line[0], line[1]) in zip(*line_down) for line in line_down)]
-                        })
+                        # Create a mapping of lines to risk scores
+                        line_to_risk = {}
+                        for idx, (from_bus, to_bus, score) in enumerate(day_1_results):
+                            line_to_risk[(from_bus, to_bus)] = score
+
+                        outage_data = []
+                        for i, (from_bus, to_bus) in enumerate(line_down):
+                            score = line_to_risk.get((from_bus, to_bus), 0)
+                            outage_data.append({
+                                "From Bus": from_bus,
+                                "To Bus": to_bus,
+                                "Outage Hour": outage_hours[i],
+                                "Risk Score": score
+                            })
+
+                        outage_df = pd.DataFrame(outage_data)
                         st.dataframe(outage_df, use_container_width=True)
 
                     # Display outage summary
@@ -992,12 +1002,12 @@ elif selection == "Weather Risk Visualisation Using GEE":
                     st.error(traceback.format_exc())
         else:
             # Display cached results if available
-            if st.session_state.weather_map_obj and "line_outage_data" in st.session_state and "risk_scores" in st.session_state:
+            if "weather_map_obj" in st.session_state and "line_outage_data" in st.session_state and "risk_scores" in st.session_state:
                 st.subheader("Day Ahead Risk Assessment")
 
                 # Display the map
                 st.write("### Geographic Risk Visualization")
-                st_folium(st.session_state.weather_map_obj.to_streamlit(), width=800, height=600, key="weather_map_cached")
+                st_folium(st.session_state.weather_map_obj, width=800, height=600, key="weather_map_cached")
 
                 # Display legends
                 st.write("### Risk Classification Legends")
@@ -1007,8 +1017,8 @@ elif selection == "Weather Risk Visualisation Using GEE":
                 final_risk_score = {
                     "title": "Final Risk Score (6-18)",
                     "colors": [('#32CD32', '6'), ('#50C878', '7'), ('#66CC66', '8'), ('#B2B200', '9'),
-                            ('#CCCC00', '10'), ('#E6B800', '11'), ('#FFD700', '12'), ('#FFCC00', '13'),
-                            ('#FFA500', '14'), ('#FF9933', '15'), ('#FF6600', '16'), ('#FF0000', '18')]
+                               ('#CCCC00', '10'), ('#E6B800', '11'), ('#FFD700', '12'), ('#FFCC00', '13'),
+                               ('#FFA500', '14'), ('#FF9933', '15'), ('#FF6600', '16'), ('#FF0000', '18')]
                 }
 
                 historical_classification = {
@@ -1019,7 +1029,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
                 historical_score = {
                     "title": "Historical Risk Score (3-9)",
                     "colors": [('lightgreen', '3'), ('green', '4'), ('yellow', '5'), ('orange', '6'),
-                            ('red', '7'), ('crimson', '8'), ('darkred', '9')]
+                               ('red', '7'), ('crimson', '8'), ('darkred', '9')]
                 }
 
                 fig = plt.figure(figsize=(5, 3))
@@ -1030,21 +1040,21 @@ elif selection == "Weather Risk Visualisation Using GEE":
                 ax1.set_title(final_risk_score["title"], fontsize=9, fontweight='bold', color='white', loc='left')
                 handles1 = [Patch(color=color, label=label) for color, label in final_risk_score["colors"]]
                 ax1.legend(handles=handles1, loc='center left', frameon=False,
-                        handleheight=1.2, handlelength=8, fontsize=9, labelcolor='white')
+                           handleheight=1.2, handlelength=8, fontsize=9, labelcolor='white')
 
                 ax2 = fig.add_subplot(gs[0, 1])
                 ax2.axis('off')
                 ax2.set_title(historical_classification["title"], fontsize=9, fontweight='bold', color='white')
                 handles2 = [Patch(color=color, label=label) for color, label in historical_classification["colors"]]
                 ax2.legend(handles=handles2, loc='center', ncol=3, frameon=False,
-                        handleheight=1.2, handlelength=5, fontsize=9, labelcolor='white')
+                           handleheight=1.2, handlelength=5, fontsize=9, labelcolor='white')
 
                 ax3 = fig.add_subplot(gs[1, 1])
                 ax3.axis('off')
                 ax3.set_title(historical_score["title"], fontsize=9, fontweight='bold', color='white')
                 handles3 = [Patch(color=color, label=label) for color, label in historical_score["colors"]]
                 ax3.legend(handles=handles3, loc='center', ncol=3, frameon=False,
-                        handleheight=1.2, handlelength=5, fontsize=9, labelcolor='white')
+                           handleheight=1.2, handlelength=5, fontsize=9, labelcolor='white')
 
                 fig.patch.set_facecolor('black')
                 plt.tight_layout(pad=1)
@@ -1061,12 +1071,22 @@ elif selection == "Weather Risk Visualisation Using GEE":
                 # Display lines expected to face outage based on threshold
                 if st.session_state.line_outage_data["lines"]:
                     st.write(f"### Lines Expected to Face Outage (Risk Score ≥ {risk_score})")
-                    outage_df = pd.DataFrame({
-                        "From Bus": [line[0] for line in st.session_state.line_outage_data["lines"]],
-                        "To Bus": [line[1] for line in st.session_state.line_outage_data["lines"]],
-                        "Outage Hour": st.session_state.line_outage_data["hours"],
-                        "Risk Score": [score for score in st.session_state.risk_scores if any((line[0], line[1]) in zip(*st.session_state.line_outage_data["lines"]) for line in st.session_state.line_outage_data["lines"])]
-                    })
+                    # Create a mapping of lines to risk scores
+                    line_to_risk = {}
+                    for idx, (from_bus, to_bus, score) in enumerate(day_1_results):
+                        line_to_risk[(from_bus, to_bus)] = score
+
+                    outage_data = []
+                    for i, (from_bus, to_bus) in enumerate(st.session_state.line_outage_data["lines"]):
+                        score = line_to_risk.get((from_bus, to_bus), 0)
+                        outage_data.append({
+                            "From Bus": from_bus,
+                            "To Bus": to_bus,
+                            "Outage Hour": st.session_state.line_outage_data["hours"][i],
+                            "Risk Score": score
+                        })
+
+                    outage_df = pd.DataFrame(outage_data)
                     st.dataframe(outage_df, use_container_width=True)
 
                 # Display outage summary
