@@ -1810,22 +1810,37 @@ if selection == "Business As Usual":
                     
                     # GeoDataFrame for transformers
                     gdf_transformers = None
-                    if df_trafo is not None:
+                    if df_trafo is not None:# Populate bus_coords with properly parsed coordinates
                         bus_coords = {}
                         for idx, row in df_line.iterrows():
-                            geodata = row["geodata"]
-                            if geodata:
+                            if isinstance(row["geodata"], str):
+                                try:
+                                    geodata = ast.literal_eval(row["geodata"])
+                                except ValueError:
+                                    print(f"Warning: Invalid geodata for line {idx}: {row['geodata']}")
+                                    geodata = []
+                            else:
+                                geodata = row["geodata"]
+                            if geodata and len(geodata) >= 2:
                                 from_coord = geodata[0]
                                 to_coord = geodata[-1]
-                                bus_coords[row["from_bus"]] = from_coord
-                                bus_coords[row["to_bus"]] = to_coord
+                                if isinstance(from_coord, tuple) and len(from_coord) == 2 and all(isinstance(x, (int, float)) for x in from_coord):
+                                    bus_coords[row["from_bus"]] = from_coord
+                                if isinstance(to_coord, tuple) and len(to_coord) == 2 and all(isinstance(x, (int, float)) for x in to_coord):
+                                    bus_coords[row["to_bus"]] = to_coord
+                        
+                        # Create transformer geometries
                         trafo_geometries = []
                         for idx, row in df_trafo.iterrows():
                             hv_bus = row["hv_bus"]
                             lv_bus = row["lv_bus"]
                             if hv_bus in bus_coords and lv_bus in bus_coords:
-                                line = LineString([bus_coords[hv_bus], bus_coords[lv_bus]])
-                                trafo_geometries.append(line)
+                                try:
+                                    line = LineString([bus_coords[hv_bus], bus_coords[lv_bus]])
+                                    trafo_geometries.append(line)
+                                except Exception as e:
+                                    print(f"Error creating LineString for transformer {idx}: {e}")
+                                    trafo_geometries.append(None)
                             else:
                                 trafo_geometries.append(None)
                         gdf_transformers = gpd.GeoDataFrame(df_trafo, geometry=trafo_geometries, crs="EPSG:4326")
