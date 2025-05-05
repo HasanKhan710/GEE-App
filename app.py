@@ -1713,9 +1713,9 @@ elif selection == "Weather Risk Visualisation Using GEE":
 elif selection == "Business As Usual":
     st.title("Business As Usual")
     
-    # Validate required data
-    required_keys = ['df_bus', 'df_load', 'df_gen', 'df_line', 'df_load_profile', 'df_gen_profile']
-    required_load_cols = ['bus', 'p_mw', 'q_mvar', 'in_service', 'criticality', 'load_coordinates']
+    # # Validate required data
+    # required_keys = ['df_bus', 'df_load', 'df_gen', 'df_line', 'df_load_profile', 'df_gen_profile']
+    # required_load_cols = ['bus', 'p_mw', 'q_mvar', 'in_service', 'criticality', 'load_coordinates']
     if "network_data" not in st.session_state or st.session_state.network_data is None:
         st.warning("Please upload and initialize network data on the Network Initialization page.")
     elif not all(key in st.session_state.network_data for key in required_keys):
