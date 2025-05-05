@@ -1637,7 +1637,7 @@ elif selection == "Business As Usual":
                                         if dp < 0.01:
                                             all_loads_zero_flag = True
                                             remaining_p = net.load.loc[net.load["bus"] == bus, "p_mw"].sum()
-                                            cumulative_load_shedding[bus]["p_mw"] += remaining  remaining_p
+                                            cumulative_load_shedding[bus]["p_mw"] += remaining_p
                                             hourly_shed_bau[hour] += sum(net.load['p_mw'])
                                             for i in range(len(net.load)):
                                                 net.load.at[i, 'p_mw'] = 0
