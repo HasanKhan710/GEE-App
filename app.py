@@ -1919,6 +1919,7 @@ elif selection == "Business As Usual":
                     line_idx_map.update({
                         (row["to_bus"], row["from_bus"]): idx for idx, row in net.line.iterrows()
                     })
+                    st.session_state.line_idx_map = line_idx_map  # Store in session state
                     trafo_idx_map = {}
                     if df_trafo is not None:
                         trafo_idx_map = {
@@ -1927,8 +1928,8 @@ elif selection == "Business As Usual":
                         trafo_idx_map.update({
                             (row["lv_bus"], row["hv_bus"]): idx for idx, row in net.trafo.iterrows()
                         })
+                    st.session_state.trafo_idx_map = trafo_idx_map  # Store in session state
                     
-                    # Get max loading capacities
                     # Get max loading capacities
                     max_loading_capacity = max(df_line['max_loading_percent'].dropna().tolist())
                     max_loading_capacity_transformer = max(df_trafo['max_loading_percent'].dropna().tolist()) if df_trafo is not None else max_loading_capacity
@@ -1960,36 +1961,39 @@ elif selection == "Business As Usual":
                         'shedding_buses': shedding_buses
                     }
                     
-                    # Display summary
-                    st.subheader("Day End Summary")
-                    if any(v["p_mw"] > 0 or v["q_mvar"] > 0 for v in cumulative_load_shedding.values()):
-                        summary_data = []
-                        for bus, shed in cumulative_load_shedding.items():
-                            total = total_demand_per_bus.get(bus, {"p_mw": 0.0, "q_mvar": 0.0})
-                            summary_data.append({
-                                "Bus": bus,
-                                "Load Shedding (MWh)": round(shed['p_mw'], 2),
-                                "Load Shedding (MVARh)": round(shed['q_mvar'], 2),
-                                "Total Demand (MWh)": round(total['p_mw'], 2),
-                                "Total Demand (MVARh)": round(total['q_mvar'], 2)
-                            })
-                        summary_df = pd.DataFrame(summary_data)
-                        st.dataframe(summary_df, use_container_width=True)
-                    else:
-                        st.success("No load shedding occurred today.")
-                    
-                    # Display costs
-                    st.write("### Hourly Generation Costs")
-                    cost_data = [{"Hour": i, "Cost (PKR)": round(cost, 2)} for i, cost in enumerate(business_as_usual_cost)]
-                    cost_df = pd.DataFrame(cost_data)
-                    st.dataframe(cost_df, use_container_width=True)
-                    
-                except Exception as e:
-                    st.error(f"Error running Business As Usual analysis: {str(e)}")
-                    st.error(traceback.format_exc())
-        
+                                            
+                    except Exception as e:
+                        st.error(f"Error generating visualization: {str(e)}")
+                        st.error(traceback.format_exc())
+            # Display analysis results if available
+        if st.session_state.bau_results is not None:
+            st.subheader("Day End Summary")
+            cumulative_load_shedding = st.session_state.bau_results['cumulative_load_shedding']
+            total_demand_per_bus = st.session_state.bau_results['total_demand_per_bus']
+            if any(v["p_mw"] > 0 or v["q_mvar"] > 0 for v in cumulative_load_shedding.values()):
+                summary_data = []
+                for bus, shed in cumulative_load_shedding.items():
+                    total = total_demand_per_bus.get(bus, {"p_mw": 0.0, "q_mvar": 0.0})
+                    summary_data.append({
+                        "Bus": bus,
+                        "Load Shedding (MWh)": round(shed['p_mw'], 2),
+                        "Load Shedding (MVARh)": round(shed['q_mvar'], 2),
+                        "Total Demand (MWh)": round(total['p_mw'], 2),
+                        "Total Demand (MVARh)": round(total['q_mvar'], 2)
+                    })
+                summary_df = pd.DataFrame(summary_data)
+                st.dataframe(summary_df, use_container_width=True)
+            else:
+                st.success("No load shedding occurred today.")
+            
+            st.write("### Hourly Generation Costs")
+            business_as_usual_cost = st.session_state.bau_results['business_as_usual_cost']
+            cost_data = [{"Hour": i, "Cost (PKR)": round(cost, 2)} for i, cost in enumerate(business_as_usual_cost)]
+            cost_df = pd.DataFrame(cost_data)
+            st.dataframe(cost_df, use_container_width=True)
+
         # Visualization
-        st.subheader("Visualize Business As Usual Using GEE")
+        st.subheader("Visualize Business As Usual")
         if st.session_state.bau_results is None:
             st.info("Please run the Business As Usual analysis first.")
         else:
@@ -1997,6 +2001,11 @@ elif selection == "Business As Usual":
             hour_options = [f"Hour {i}" for i in range(num_hours)]
             selected_hour = st.selectbox("Select Hour to Visualize", options=hour_options)
             hour_idx = int(selected_hour.split()[-1])
+            
+            # Display cached map if available and matches selected hour
+            if st.session_state.bau_map_obj is not None and st.session_state.selected_hour == hour_idx:
+                st.write(f"### Network Loading Visualization - Hour {hour_idx}")
+                st_folium(st.session_state.bau_map_obj, width=800, height=600, key=f"bau_map_cached_{hour_idx}")
             
             if st.button("Generate Visualization"):
                 with st.spinner("Generating visualization..."):
@@ -2007,6 +2016,8 @@ elif selection == "Business As Usual":
                         loading_percent = st.session_state.bau_results['loading_percent_bau'][hour_idx]
                         shedding_buses = st.session_state.bau_results['shedding_buses']
                         no_of_lines = len(df_line) if df_trafo is None else len(df_line) - len(df_trafo)
+                        line_idx_map = st.session_state.get('line_idx_map', {})
+                        trafo_idx_map = st.session_state.get('trafo_idx_map', {})
                         
                         # Prepare GeoDataFrame
                         df_line["geodata"] = df_line["geodata"].apply(
@@ -2058,7 +2069,7 @@ elif selection == "Business As Usual":
                                 return '#FFA500'
                             else:
                                 return '#FF0000'
-                                
+                        
                         # Style function
                         def style_function(feature):
                             props = feature['properties']
@@ -2069,9 +2080,8 @@ elif selection == "Business As Usual":
                             return {'color': color, 'weight': 3}
                         
                         # Add lines
-                        geojson = gdf.__geo_interface__
                         folium.GeoJson(
-                            geojson,
+                            gdf.__geo_interface__,
                             name=f'Transmission Net at Hour {hour_idx}',
                             style_function=style_function
                         ).add_to(m)
@@ -2125,7 +2135,7 @@ elif selection == "Business As Usual":
                     except Exception as e:
                         st.error(f"Error generating visualization: {str(e)}")
                         st.error(traceback.format_exc())
-            
+                        
             # Display cached map
             if st.session_state.bau_map_obj is not None and st.session_state.selected_hour == hour_idx:
                 st.write(f"### Network Loading Visualization - Hour {hour_idx}")
