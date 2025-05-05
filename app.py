@@ -1960,11 +1960,11 @@ elif selection == "Business As Usual":
                         'loading_percent_bau': loading_percent_bau,
                         'shedding_buses': shedding_buses
                     }
-                    
-                    # except Exception as e:
-                    #     st.error(f"Error running BAU: {str(e)}")
-                    #     st.error(traceback.format_exc())
-            # Display analysis results if available
+                except Exception as e:
+                    st.error(f"Error running Business As Usual analysis: {str(e)}")
+                    st.error(traceback.format_exc())
+        
+        # ADDED: Display analysis results if available
         if st.session_state.bau_results is not None:
             st.subheader("Day End Summary")
             cumulative_load_shedding = st.session_state.bau_results['cumulative_load_shedding']
@@ -1992,7 +1992,7 @@ elif selection == "Business As Usual":
             st.dataframe(cost_df, use_container_width=True)
 
         # Visualization
-        st.subheader("Visualize Business As Usual")
+        st.subheader("Visualize Business As Usual") # CHANGED: Removed "Using GEE" as visualization uses Folium
         if st.session_state.bau_results is None:
             st.info("Please run the Business As Usual analysis first.")
         else:
@@ -2001,7 +2001,7 @@ elif selection == "Business As Usual":
             selected_hour = st.selectbox("Select Hour to Visualize", options=hour_options)
             hour_idx = int(selected_hour.split()[-1])
             
-            # Display cached map if available and matches selected hour
+            # ADDED: Display cached map if available and matches selected hour
             if st.session_state.bau_map_obj is not None and st.session_state.selected_hour == hour_idx:
                 st.write(f"### Network Loading Visualization - Hour {hour_idx}")
                 st_folium(st.session_state.bau_map_obj, width=800, height=600, key=f"bau_map_cached_{hour_idx}")
@@ -2015,8 +2015,8 @@ elif selection == "Business As Usual":
                         loading_percent = st.session_state.bau_results['loading_percent_bau'][hour_idx]
                         shedding_buses = st.session_state.bau_results['shedding_buses']
                         no_of_lines = len(df_line) if df_trafo is None else len(df_line) - len(df_trafo)
-                        line_idx_map = st.session_state.get('line_idx_map', {})
-                        trafo_idx_map = st.session_state.get('trafo_idx_map', {})
+                        line_idx_map = st.session_state.get('line_idx_map', {}) # CHANGED: Retrieve from session state
+                        trafo_idx_map = st.session_state.get('trafo_idx_map', {}) # CHANGED: Retrieve from session state
                         
                         # Prepare GeoDataFrame
                         df_line["geodata"] = df_line["geodata"].apply(
@@ -2131,15 +2131,12 @@ elif selection == "Business As Usual":
                         st.write(f"### Network Loading Visualization - Hour {hour_idx}")
                         st_folium(m, width=800, height=600, key=f"bau_map_{hour_idx}")
                         
-            except Exception as e:
-                  st.error(f"Error generating visualization: {str(e)}")
-                  st.error(traceback.format_exc())
-                        
-            # Display cached map
-            if st.session_state.bau_map_obj is not None and st.session_state.selected_hour == hour_idx:
-                st.write(f"### Network Loading Visualization - Hour {hour_idx}")
-                st_folium(st.session_state.bau_map_obj, width=800, height=600, key=f"bau_map_cached_{hour_idx}")
-
+                    except Exception as e:
+                        st.error(f"Error generating visualization: {str(e)}")
+                        st.error(traceback.format_exc())
+                
+                    
+                    
 
 
 
