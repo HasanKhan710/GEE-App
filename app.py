@@ -1359,7 +1359,6 @@ elif selection == "Weather Risk Visualisation Using GEE":
             else:
                 st.info("Select parameters and click 'Process Weather Risk Data' to analyze weather risks to the electricity grid.")
     
-# Page 3: Business As Usual
 if selection == "Business As Usual":
     st.title("Business As Usual Analysis")
 
