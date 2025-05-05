@@ -1589,13 +1589,15 @@ elif selection == "Business As Usual":
                             return []
                         no_of_lines_in_network = len(df_line) - 1
                         capped_limit = math.floor(0.2 * no_of_lines_in_network)
-                        combined = [(line[0], line[1], hour, risk) for line, hour, risk in zip(line_down, outage_hours, risk_scores)]
+                        # Extract numeric risk score from dictionary
+                        numeric_risk_scores = [rs['score'] if isinstance(rs, dict) and 'score' in rs else rs for rs in risk_scores]
+                        combined = [(line[0], line[1], hour, risk) for line, hour, risk in zip(line_down, outage_hours, numeric_risk_scores)]
                         sorted_combined = sorted(combined, key=lambda x: x[-1], reverse=True)
                         line_outages = [(line[0], line[1], line[2]) for line in sorted_combined]
                         if capped_contingency_mode and len(line_outages) > capped_limit:
                             line_outages = line_outages[:capped_limit]
                         return line_outages
-                    
+                        
                     def overloaded_lines(net, max_loading_capacity):
                         overloaded = []
                         for idx, res in net.res_line.iterrows():
