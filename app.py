@@ -153,8 +153,8 @@ def generate_line_outages(outage_hours, line_down, risk_scores, capped_contingen
         return []
     no_of_lines_in_network = len(df_line) - 1
     capped_limit = math.floor(0.2 * no_of_lines_in_network)
-    # Debug: Log risk_scores structure
-    st.write("Debug: risk_scores =", risk_scores)
+    # # Debug: Log risk_scores structure
+    # st.write("Debug: risk_scores =", risk_scores)
     # Extract numeric risk scores
     def extract_risk(rs):
         if isinstance(rs, (int, float)):
