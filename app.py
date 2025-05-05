@@ -1519,7 +1519,7 @@ elif selection == "Business As Usual":
           if line_match:
               return False
               
-    return None  # If no match in either
+        return None  # If no match in either
 
     def transform_loading(a):
         """Transform loading percentages for display"""
