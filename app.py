@@ -1990,13 +1990,13 @@ elif selection == "Business As Usual":
                         for hour_loading in st.session_state.bau_results['loading_percent_bau']
                     ]
 
-    # Extend the existing results dict
-    st.session_state.bau_results.update({
-        'gdf': gdf,
-        'loading_records': loading_records,
-        'line_idx_map': line_idx_map,
-        'shedding_buses': shedding_buses
-    })
+                    # Extend the existing results dict
+                    st.session_state.bau_results.update({
+                        'gdf': gdf,
+                        'loading_records': loading_records,
+                        'line_idx_map': line_idx_map,
+                        'shedding_buses': shedding_buses
+                    })
 
                 except Exception as e:
                     st.error(f"Error running Business As Usual analysis: {str(e)}")
