@@ -1497,7 +1497,7 @@ elif selection == "Business As Usual":
 
     # Helper functions adapted for Streamlit file handling
     def check_bus_pair(file_content, bus_pair):
-        """Check if bus pair is a transformer or line"""
+        
         file_content.seek(0)  
         xls = pd.ExcelFile(path)
         if "Transformer Parameters" in xls.sheet_names:
@@ -1519,7 +1519,7 @@ elif selection == "Business As Usual":
           if line_match:
               return False
               
-      return None  # If no match in either
+    return None  # If no match in either
 
     def transform_loading(a):
         """Transform loading percentages for display"""
