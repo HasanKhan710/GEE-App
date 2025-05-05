@@ -14,6 +14,18 @@ import random
 import geemap
 import numpy as np
 import math
+# Page 3: Business As Usual
+import pandas as pd
+import pandapower as pp
+import geopandas as gpd
+import folium
+from streamlit_folium import st_folium
+from shapely.geometry import LineString
+import ee
+import math
+import re
+import ast
+
 
 # Set page configuration
 st.set_page_config(
@@ -1475,18 +1487,6 @@ elif selection == "Weather Risk Visualisation Using GEE":
                         st.metric("Max Wind Occurrences", int(st.session_state.max_occurrences["wind"]))
             else:
                 st.info("Select parameters and click 'Process Weather Risk Data' to analyze weather risks to the electricity grid.")
-
-# Page 3: Business As Usual
-import pandas as pd
-import pandapower as pp
-import geopandas as gpd
-import folium
-from streamlit_folium import st_folium
-from shapely.geometry import LineString
-import ee
-import math
-import re
-import ast
 
 # Page 3: Business As Usual
 elif selection == "Business As Usual":
