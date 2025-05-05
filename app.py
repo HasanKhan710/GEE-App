@@ -1360,17 +1360,14 @@ if selection == "Network Initialization":
 #                 st.info("Select parameters and click 'Process Weather Risk Data' to analyze weather risks to the electricity grid.")
 if selection == "Weather Risk Visualisation Using GEE":
     st.title("Weather Risk Visualisation Using GEE")
-    if path:
-        if st.button("Generate Weather Risk Data"):
-            # Placeholder for weather risk logic (to be replaced with actual GEE integration)
-            st.session_state.line_outage_data = {
-                "hours": [15, 12, 14],  # Example hours
-                "lines": [(0, 4), (1, 2), (1, 3)]  # Example line pairs
+    st.button("Generate Weather Risk Data"):
+           # Placeholder for weather risk logic (to be replaced with actual GEE integration)
+       st.session_state.line_outage_data = {
+       "hours": [15, 12, 14],  # Example hours
+       "lines": [(0, 4), (1, 2), (1, 3)]  # Example line pairs
             }
-            st.success("Weather risk data generated and stored in session state.")
-    else:
-        st.warning("Please upload an Excel file first.")
-
+       st.success("Weather risk data generated and stored in session state.")
+    
 # Page 3: Business As Usual
 if selection == "Business As Usual":
     st.title("Business As Usual Analysis")
