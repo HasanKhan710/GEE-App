@@ -2343,3 +2343,17 @@ def overloaded_transformer(net):
                 if val >= max_loading_capacity_transformer:
                     overloaded.append(idx)
     return overloaded
+
+def generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency_mode=False):
+    if not outage_hours or not line_down or not risk_scores:
+        return []
+    uploaded_file = st.session_state.uploaded_file
+    df_line = pd.read_excel(uploaded_file, sheet_name="Line Parameters")
+    no_of_lines_in_network = len(df_line) - 1
+    capped_limit = math.floor(0.2 * no_of_lines_in_network)
+    combined = [(line[0], line[1], hour, risk) for line, hour, risk in zip(line_down, outage_hours, risk_scores)]
+    sorted_combined = sorted(combined, key=lambda x: x[-1], reverse=True)
+    line_outages = [(line[0], line[1], line[2]) for line in sorted_combined]
+    if capped_contingency_mode and len(line_outages) > capped_limit:
+        line_outages = line_outages[:capped_limit]
+    return line_outages
