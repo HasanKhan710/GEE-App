@@ -2131,9 +2131,9 @@ elif selection == "Business As Usual":
                         st.write(f"### Network Loading Visualization - Hour {hour_idx}")
                         st_folium(m, width=800, height=600, key=f"bau_map_{hour_idx}")
                         
-                    except Exception as e:
-                        st.error(f"Error generating visualization: {str(e)}")
-                        st.error(traceback.format_exc())
+            except Exception as e:
+                  st.error(f"Error generating visualization: {str(e)}")
+                  st.error(traceback.format_exc())
                         
             # Display cached map
             if st.session_state.bau_map_obj is not None and st.session_state.selected_hour == hour_idx:
