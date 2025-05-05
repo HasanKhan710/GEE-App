@@ -1974,7 +1974,8 @@ elif selection == "Business As Usual":
                     }
                     
                                 # ———————————————————————————————————————————
-                    # Build & cache GeoDataFrame and per-hour loading
+                                # ———————————————————————————————————————————
+                    # Build & cache GeoDataFrame, per-hour loading, and outages
                     df_line = network_data['df_line'].copy()
                     df_line["geodata"] = df_line["geodata"].apply(
                         lambda x: [(lon, lat) for lat, lon in eval(x)] if isinstance(x, str) else x
@@ -1992,21 +1993,13 @@ elif selection == "Business As Usual":
                     ]
         
                     st.session_state.bau_results.update({
-                        'gdf': gdf,
+                        'gdf'            : gdf,
                         'loading_records': loading_records,
-                        'line_idx_map': line_idx_map,
-                        # you already had 'shedding_buses' above but no harm re-adding:
-                        'shedding_buses': shedding_buses
+                        'line_idx_map'   : line_idx_map,
+                        'line_outages'   : line_outages,
+                        'shedding_buses' : shedding_buses
                     })
                     # ———————————————————————————————————————————
-
-                    # Extend the existing results dict
-                    st.session_state.bau_results.update({
-                        'gdf': gdf,
-                        'loading_records': loading_records,
-                        'line_idx_map': line_idx_map,
-                        'shedding_buses': shedding_buses
-                    })
 
                 except Exception as e:
                     st.error(f"Error running Business As Usual analysis: {str(e)}")
@@ -2044,7 +2037,6 @@ elif selection == "Business As Usual":
         # Visualization cc
         # Visualization
         st.subheader("Visualize Business As Usual")
-
         if st.session_state.bau_results is None:
             st.info("Please run the Business As Usual analysis first.")
         else:
@@ -2057,7 +2049,6 @@ elif selection == "Business As Usual":
                 hr  = st.selectbox("Select Hour to Display", options=hrs, key="bau_hour")
 
                 with st.spinner(f"Generating map for Hour {hr}..."):
-                    # pull from session
                     gdf             = st.session_state.bau_results['gdf']
                     loading_records = st.session_state.bau_results['loading_records']
                     line_outages    = st.session_state.bau_results['line_outages']
@@ -2065,7 +2056,7 @@ elif selection == "Business As Usual":
                     line_idx_map    = st.session_state.bau_results['line_idx_map']
                     df_load         = st.session_state.network_data['df_load']
                     cap             = st.session_state.max_loading_capacity
-
+                    
                     def get_color(pct):
                         if pct is None:    return "#FF0000"
                         if pct == 0:       return "#000000"
