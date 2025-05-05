@@ -1973,6 +1973,7 @@ elif selection == "Business As Usual":
                         'shedding_buses': shedding_buses
                     }
                     
+                                # ———————————————————————————————————————————
                     # Build & cache GeoDataFrame and per-hour loading
                     df_line = network_data['df_line'].copy()
                     df_line["geodata"] = df_line["geodata"].apply(
@@ -1984,11 +1985,20 @@ elif selection == "Business As Usual":
                         crs="EPSG:4326"
                     )
                     gdf["idx"] = gdf.index
-                
+        
                     loading_records = [
                         {i: pct for i, pct in enumerate(hour_loading)}
-                        for hour_loading in st.session_state.bau_results['loading_percent_bau']
+                        for hour_loading in loading_percent_bau
                     ]
+        
+                    st.session_state.bau_results.update({
+                        'gdf': gdf,
+                        'loading_records': loading_records,
+                        'line_idx_map': line_idx_map,
+                        # you already had 'shedding_buses' above but no harm re-adding:
+                        'shedding_buses': shedding_buses
+                    })
+                    # ———————————————————————————————————————————
 
                     # Extend the existing results dict
                     st.session_state.bau_results.update({
