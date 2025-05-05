@@ -272,6 +272,7 @@ def overloaded_lines(net):
     return overloaded
 
 # Page 1: Network Initialization
+# Page 1: Network Initialization
 if selection == "Network Initialization":
     # Primary project title
     st.title("Continuous Monitoring of Climate Risks to Electricity Grid using Google Earth Engine")
@@ -313,6 +314,24 @@ if selection == "Network Initialization":
                            p_mw=row["p_mw"],
                            q_mvar=row["q_mvar"],
                            in_service=row["in_service"])
+
+        # --- Create Transformers (if sheet exists) ---
+        df_trafo = None
+        if "Transformer Parameters" in pd.ExcelFile(uploaded_file).sheet_names:
+            df_trafo = pd.read_excel(uploaded_file, sheet_name="Transformer Parameters", index_col=0)
+            for idx, row in df_trafo.iterrows():
+                pp.create_transformer_from_parameters(net,
+                                                      hv_bus=row["hv_bus"],
+                                                      lv_bus=row["lv_bus"],
+                                                      sn_mva=row["sn_mva"],
+                                                      vn_hv_kv=row["vn_hv_kv"],
+                                                      vn_lv_kv=row["vn_lv_kv"],
+                                                      vk_percent=row["vk_percent"],
+                                                      vkr_percent=row["vkr_percent"],
+                                                      pfe_kw=row["pfe_kw"],
+                                                      i0_percent=row["i0_percent"],
+                                                      in_service=row["in_service"],
+                                                      max_loading_percent=row["max_loading_percent"])
 
         # --- Create Generators/External Grid ---
         df_gen = pd.read_excel(uploaded_file, sheet_name="Generator Parameters", index_col=0)
@@ -403,7 +422,8 @@ if selection == "Network Initialization":
             'df_gen': df_gen,
             'df_line': df_line,
             'df_load_profile': df_load_profile,
-            'df_gen_profile': df_gen_profile
+            'df_gen_profile': df_gen_profile,
+            'df_trafo': df_trafo  # Add transformer data to session state
         }
 
     # --- Button to Display Results ---
@@ -429,6 +449,11 @@ if selection == "Network Initialization":
         # Display Generator Parameters
         st.write("### Generator Parameters")
         st.dataframe(st.session_state.network_data['df_gen'])
+
+        # Display Transformer Parameters (if exists)
+        if st.session_state.network_data['df_trafo'] is not None:
+            st.write("### Transformer Parameters")
+            st.dataframe(st.session_state.network_data['df_trafo'])
 
         # Display Line Parameters
         st.write("### Line Parameters")
@@ -460,7 +485,7 @@ if selection == "Network Initialization":
 
     if uploaded_file is None and not st.session_state.show_results:
         st.info("Please upload an Excel file to proceed.")
-
+        
 # Page 2: Weather Risk Visualisation Using GEE
 elif selection == "Weather Risk Visualisation Using GEE":
     st.title("Weather Risk Visualisation Using GEE")
