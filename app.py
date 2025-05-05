@@ -1360,7 +1360,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
                 st.info("Select parameters and click 'Process Weather Risk Data' to analyze weather risks to the electricity grid.")
 
 # Page 3: Business As Usual
-elif selection == "Business As Usual":
+if selection == "Business As Usual":
     st.title("Business As Usual Analysis")
 
     if "line_outage_data" not in st.session_state or st.session_state.line_outage_data is None:
@@ -1378,13 +1378,15 @@ elif selection == "Business As Usual":
                 try:
                     outage_hours = st.session_state.line_outage_data["hours"]
                     line_down = st.session_state.line_outage_data["lines"]
-                    global path
-                    xls = pd.ExcelFile(path)
+                    uploaded_file = st.session_state.uploaded_file
+                    if uploaded_file is None:
+                        raise ValueError("No uploaded file found in session state.")
+                    xls = pd.ExcelFile(uploaded_file)
                     if "Transformer Parameters" in xls.sheet_names:
-                        [net, df_bus, df_slack, df_line, num_hours, load_dynamic, gen_dynamic, df_load_profile, df_gen_profile, df_trafo] = Network_initialize()
+                        [net, df_bus, df_slack, df_line, num_hours, load_dynamic, gen_dynamic, df_load_profile, df_gen_profile, df_trafo] = Network_initialize(uploaded_file)
                     else:
-                        [net, df_bus, df_slack, df_line, num_hours, load_dynamic, gen_dynamic, df_load_profile, df_gen_profile] = Network_initialize()
-                    business_as_usual_cost = calculating_hourly_cost(path)
+                        [net, df_bus, df_slack, df_line, num_hours, load_dynamic, gen_dynamic, df_load_profile, df_gen_profile] = Network_initialize(uploaded_file)
+                    business_as_usual_cost = calculating_hourly_cost(uploaded_file)
 
                     df_lines = df_line.copy()
                     df_lines["geodata"] = df_lines["geodata"].apply(
@@ -1402,7 +1404,7 @@ elif selection == "Business As Usual":
                         crs="EPSG:4326"
                     )
 
-                    load_df = pd.read_excel(path, sheet_name='Load Parameters')
+                    load_df = pd.read_excel(uploaded_file, sheet_name='Load Parameters')
                     load_df['coordinates'] = load_df['load_coordinates'].apply(lambda x: ast.literal_eval(x))
 
                     line_idx_map = {
@@ -1456,7 +1458,7 @@ elif selection == "Business As Usual":
                         for (fbus, tbus, start_hr) in line_outages:
                             if hour < start_hr:
                                 continue
-                            is_trafo = check_bus_pair(path, (fbus, tbus))
+                            is_trafo = check_bus_pair(uploaded_file, (fbus, tbus))
                             if is_trafo:
                                 mask_tf = (
                                     ((net.trafo.hv_bus == fbus) & (net.trafo.lv_bus == tbus)) |
@@ -1484,7 +1486,7 @@ elif selection == "Business As Usual":
                                 p = df_gen_profile.at[hour, gen_dynamic[bus]]
                                 net.gen.at[idx, "p_mw"] = p
 
-                        df_load_params = pd.read_excel(path, sheet_name="Load Parameters", index_col=0)
+                        df_load_params = pd.read_excel(uploaded_file, sheet_name="Load Parameters", index_col=0)
                         criticality_map = dict(zip(df_load_params["bus"], df_load_params["criticality"]))
                         net.load["criticality"] = net.load["bus"].map(criticality_map)
 
@@ -1603,7 +1605,7 @@ elif selection == "Business As Usual":
                             weather_down_set = set()
                             for (fbus, tbus, start_hr) in line_outages:
                                 if selected_hour >= start_hr:
-                                    is_trafo = check_bus_pair(path, (fbus, tbus))
+                                    is_trafo = check_bus_pair(uploaded_file, (fbus, tbus))
                                     idx = trafo_idx_map[(fbus, tbus)] if is_trafo and "Transformer Parameters" in xls.sheet_names else line_idx_map[(fbus, tbus)]
                                     weather_down_set.add(idx)
 
