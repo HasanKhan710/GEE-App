@@ -1488,7 +1488,225 @@ elif selection == "Weather Risk Visualisation Using GEE":
 #             else:
 #                 st.info("Select parameters and click 'Process Weather Risk Data' to analyze weather risks to the electricity grid.")
 
-# Page 3: Business As Usual
+def transform_loading(a):
+    if a is None:
+        return a
+    is_single = False
+    if isinstance(a, (int, float)):
+        a = [a]
+        is_single = True
+    flag = True
+    for item in a:
+        if isinstance(item, (int, float)) and item >= 2.5:
+            flag = False
+    if flag:
+        a = [item * 100 if isinstance(item, (int, float)) else item for item in a]
+    return a[0] if is_single else a
+
+def all_real_numbers(lst):
+    invalid_count = 0
+    for x in lst:
+        if not isinstance(x, (int, float)):
+            invalid_count += 1
+        elif not math.isfinite(x):
+            invalid_count += 1
+    if invalid_count > len(lst):
+        return False
+    return True
+
+def check_bus_pair(df_line, df_trafo, bus_pair):
+    from_bus, to_bus = bus_pair
+    if df_trafo is not None:
+        transformer_match = (
+            ((df_trafo['hv_bus'] == from_bus) & (df_trafo['lv_bus'] == to_bus)) |
+            ((df_trafo['hv_bus'] == to_bus) & (df_trafo['lv_bus'] == from_bus))
+        ).any()
+        if transformer_match:
+            return True
+    line_match = (
+        ((df_line['from_bus'] == from_bus) & (df_line['to_bus'] == to_bus)) |
+        ((df_line['from_bus'] == to_bus) & (df_line['to_bus'] == from_bus))
+    ).any()
+    if line_match:
+        return False
+    st.error(f"Line or Transformer {from_bus}-{to_bus} not present in network.")
+    return None
+
+def generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency_mode=False, df_line=None):
+    if not outage_hours or not line_down or not risk_scores or df_line is None:
+        return []
+    no_of_lines_in_network = len(df_line) - 1
+    capped_limit = math.floor(0.2 * no_of_lines_in_network)
+    # Debug: Log risk_scores structure
+    st.write("Debug: risk_scores =", risk_scores)
+    # Extract numeric risk scores
+    def extract_risk(rs):
+        if isinstance(rs, (int, float)):
+            return float(rs)
+        elif isinstance(rs, dict):
+            for key in ['score', 'risk', 'value']:  # Common keys
+                if key in rs and isinstance(rs[key], (int, float)):
+                    return float(rs[key])
+                elif key in rs and isinstance(rs[key], str) and rs[key].replace('.', '', 1).isdigit():
+                    return float(rs[key])
+        elif isinstance(rs, str) and rs.replace('.', '', 1).isdigit():
+            return float(rs)
+        return 0.0  # Default for invalid entries
+    numeric_risk_scores = [extract_risk(rs) for rs in risk_scores]
+    combined = [(line[0], line[1], hour, risk) for line, hour, risk in zip(line_down, outage_hours, numeric_risk_scores)]
+    sorted_combined = sorted(combined, key=lambda x: x[-1], reverse=True)
+    line_outages = [(line[0], line[1], line[2]) for line in sorted_combined]
+    if capped_contingency_mode and len(line_outages) > capped_limit:
+        line_outages = line_outages[:capped_limit]
+    return line_outages
+
+def overloaded_lines(net, max_loading_capacity):
+    overloaded = []
+    for idx, res in net.res_line.iterrows():
+        val = transform_loading(res["loading_percent"])
+        if all_real_numbers(net.res_line['loading_percent'].tolist()) == False:
+            if not isinstance(val, (int, float)) or math.isnan(val) or val >= max_loading_capacity:
+                overloaded.append(idx)
+        else:
+            if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity:
+                overloaded.append(idx)
+    return overloaded
+
+def overloaded_transformer(net, max_loading_capacity_transformer):
+    overloaded = []
+    if 'trafo' in net and net.trafo is not None:
+        for idx, res in net.res_trafo.iterrows():
+            val = transform_loading(res["loading_percent"])
+            if all_real_numbers(net.res_trafo['loading_percent'].tolist()) == False:
+                if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity_transformer:
+                    overloaded.append(idx)
+            else:
+                if val >= max_loading_capacity_transformer:
+                    overloaded.append(idx)
+    return overloaded
+
+def initialize_network(df_bus, df_load, df_gen, df_line, df_trafo, df_load_profile, df_gen_profile):
+    net = pp.create_empty_network()
+    for idx, row in df_bus.iterrows():
+        pp.create_bus(net,
+                      name=row["name"],
+                      vn_kv=row["vn_kv"],
+                      zone=row["zone"],
+                      in_service=row["in_service"],
+                      max_vm_pu=row["max_vm_pu"],
+                      min_vm_pu=row["min_vm_pu"])
+    for idx, row in df_load.iterrows():
+        pp.create_load(net,
+                       bus=row["bus"],
+                       p_mw=row["p_mw"],
+                       q_mvar=row["q_mvar"],
+                       in_service=row["in_service"])
+    for idx, row in df_gen.iterrows():
+        if row["slack_weight"] == 1:
+            ext_grid = pp.create_ext_grid(net,
+                                          bus=row["bus"],
+                                          vm_pu=row["vm_pu"],
+                                          va_degree=0)
+            pp.create_poly_cost(net, element=ext_grid, et="ext_grid",
+                                cp0_eur_per_mw=row["cp0_pkr_per_mw"],
+                                cp1_eur_per_mw=row["cp1_pkr_per_mw"],
+                                cp2_eur_per_mw=row["cp2_pkr_per_mw"],
+                                cp0_eur_per_mvar=row["cp0_pkr_per_mvar"],
+                                cq1_eur_per_mvar=row["cq1_pkr_per_mvar"],
+                                cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
+        else:
+            gen_idx = pp.create_gen(net,
+                                    bus=row["bus"],
+                                    p_mw=row["p_mw"],
+                                    vm_pu=row["vm_pu"],
+                                    min_q_mvar=row["min_q_mvar"],
+                                    max_q_mvar=row["max_q_mvar"],
+                                    scaling=row["scaling"],
+                                    in_service=row["in_service"],
+                                    slack_weight=row["slack_weight"],
+                                    controllable=row["controllable"],
+                                    max_p_mw=row["max_p_mw"],
+                                    min_p_mw=row["min_p_mw"])
+            pp.create_poly_cost(net, element=gen_idx, et="gen",
+                                cp0_eur_per_mw=row["cp0_pkr_per_mw"],
+                                cp1_eur_per_mw=row["cp1_pkr_per_mw"],
+                                cp2_eur_per_mw=row["cp2_pkr_per_mw"],
+                                cp0_eur_per_mvar=row["cp0_pkr_per_mvar"],
+                                cq1_eur_per_mvar=row["cq1_pkr_per_mvar"],
+                                cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
+    for idx, row in df_line.iterrows():
+        if pd.isna(row["parallel"]):
+            continue
+        if isinstance(row["geodata"], str):
+            geodata = ast.literal_eval(row["geodata"])
+        else:
+            geodata = row["geodata"]
+        pp.create_line_from_parameters(net,
+                                       from_bus=row["from_bus"],
+                                       to_bus=row["to_bus"],
+                                       length_km=row["length_km"],
+                                       r_ohm_per_km=row["r_ohm_per_km"],
+                                       x_ohm_per_km=row["x_ohm_per_km"],
+                                       c_nf_per_km=row["c_nf_per_km"],
+                                       max_i_ka=row["max_i_ka"],
+                                       in_service=row["in_service"],
+                                       max_loading_percent=row["max_loading_percent"],
+                                       geodata=geodata)
+    if df_trafo is not None:
+        for idx, row in df_trafo.iterrows():
+            pp.create_transformer_from_parameters(net,
+                                                  hv_bus=row["hv_bus"],
+                                                  lv_bus=row["lv_bus"],
+                                                  sn_mva=row["sn_mva"],
+                                                  vn_hv_kv=row["vn_hv_kv"],
+                                                  vn_lv_kv=row["vn_lv_kv"],
+                                                  vk_percent=row["vk_percent"],
+                                                  vkr_percent=row["vkr_percent"],
+                                                  pfe_kw=row["pfe_kw"],
+                                                  i0_percent=row["i0_percent"],
+                                                  in_service=row["in_service"],
+                                                  max_loading_percent=row["max_loading_percent"])
+    load_dynamic = {}
+    for col in df_load_profile.columns:
+        m = re.match(r"p_mw_bus_(\d+)", col)
+        if m:
+            bus = int(m.group(1))
+            q_col = f"q_mvar_bus_{bus}"
+            if q_col in df_load_profile.columns:
+                load_dynamic[bus] = {"p": col, "q": q_col}
+    gen_dynamic = {}
+    for col in df_gen_profile.columns:
+        if col.startswith("p_mw"):
+            numbers = re.findall(r'\d+', col)
+            if numbers:
+                bus = int(numbers[-1])
+                gen_dynamic[bus] = col
+    return net, load_dynamic, gen_dynamic
+
+def calculate_hourly_cost(net, load_dynamic, gen_dynamic, num_hours, df_load_profile, df_gen_profile):
+    hourly_cost_list = []
+    for hour in range(num_hours):
+        for bus_id, cols in load_dynamic.items():
+            p_val = float(df_load_profile.at[hour, cols["p"]])
+            q_val = float(df_load_profile.at[hour, cols["q"]])
+            mask = net.load.bus == bus_id
+            net.load.loc[mask, "p_mw"] = p_val
+            net.load.loc[mask, "q_mvar"] = q_val
+        for bus_id, col in gen_dynamic.items():
+            p_val = float(df_gen_profile.at[hour, col])
+            if bus_id in net.ext_grid.bus.values:
+                mask = net.ext_grid.bus == bus_id
+                net.ext_grid.loc[mask, "p_mw"] = p_val
+            else:
+                mask = net.gen.bus == bus_id
+                net.gen.loc[mask, "p_mw"] = p_val
+        try:
+            pp.runopp(net)
+            hourly_cost_list.append(net.res_cost)
+        except:
+            hourly_cost_list.append(0)
+    return hourly_cost_list
+
 # Page 3: Business As Usual
 elif selection == "Business As Usual":
     st.title("Business As Usual")
@@ -1538,227 +1756,8 @@ elif selection == "Business As Usual":
                     outage_hours = line_outage_data['hours']
                     line_down = line_outage_data['lines']
                     risk_scores = line_outage_data['risk_scores']
-                    
-                    # Helper functions
-                    def transform_loading(a):
-                        if a is None:
-                            return a
-                        is_single = False
-                        if isinstance(a, (int, float)):
-                            a = [a]
-                            is_single = True
-                        flag = True
-                        for item in a:
-                            if isinstance(item, (int, float)) and item >= 2.5:
-                                flag = False
-                        if flag:
-                            a = [item * 100 if isinstance(item, (int, float)) else item for item in a]
-                        return a[0] if is_single else a
-                    
-                    def all_real_numbers(lst):
-                        invalid_count = 0
-                        for x in lst:
-                            if not isinstance(x, (int, float)):
-                                invalid_count += 1
-                            elif not math.isfinite(x):
-                                invalid_count += 1
-                        if invalid_count > len(lst):
-                            return False
-                        return True
-                    
-                    def check_bus_pair(df_line, df_trafo, bus_pair):
-                        from_bus, to_bus = bus_pair
-                        if df_trafo is not None:
-                            transformer_match = (
-                                ((df_trafo['hv_bus'] == from_bus) & (df_trafo['lv_bus'] == to_bus)) |
-                                ((df_trafo['hv_bus'] == to_bus) & (df_trafo['lv_bus'] == from_bus))
-                            ).any()
-                            if transformer_match:
-                                return True
-                        line_match = (
-                            ((df_line['from_bus'] == from_bus) & (df_line['to_bus'] == to_bus)) |
-                            ((df_line['from_bus'] == to_bus) & (df_line['to_bus'] == from_bus))
-                        ).any()
-                        if line_match:
-                            return False
-                        st.error(f"Line or Transformer {from_bus}-{to_bus} not present in network.")
-                        return None
-                    
-                    def generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency_mode=False):
-                        if not outage_hours or not line_down or not risk_scores:
-                            return []
-                        no_of_lines_in_network = len(df_line) - 1
-                        capped_limit = math.floor(0.2 * no_of_lines_in_network)
-                        # Debug: Log risk_scores structure
-                        st.write("Debug: risk_scores =", risk_scores)
-                        # Extract numeric risk scores
-                        def extract_risk(rs):
-                            if isinstance(rs, (int, float)):
-                                return float(rs)
-                            elif isinstance(rs, dict):
-                                for key in ['score', 'risk', 'value']:  # Common keys
-                                    if key in rs and isinstance(rs[key], (int, float)):
-                                        return float(rs[key])
-                                    elif key in rs and isinstance(rs[key], str) and rs[key].replace('.', '', 1).isdigit():
-                                        return float(rs[key])
-                            elif isinstance(rs, str) and rs.replace('.', '', 1).isdigit():
-                                return float(rs)
-                            return 0.0  # Default for invalid entries
-                        numeric_risk_scores = [extract_risk(rs) for rs in risk_scores]
-                        combined = [(line[0], line[1], hour, risk) for line, hour, risk in zip(line_down, outage_hours, numeric_risk_scores)]
-                        sorted_combined = sorted(combined, key=lambda x: x[-1], reverse=True)
-                        line_outages = [(line[0], line[1], line[2]) for line in sorted_combined]
-                        if capped_contingency_mode and len(line_outages) > capped_limit:
-                            line_outages = line_outages[:capped_limit]
-                        return line_outages
-                        
-                    def overloaded_lines(net, max_loading_capacity):
-                        overloaded = []
-                        for idx, res in net.res_line.iterrows():
-                            val = transform_loading(res["loading_percent"])
-                            if all_real_numbers(net.res_line['loading_percent'].tolist()) == False:
-                                if not isinstance(val, (int, float)) or math.isnan(val) or val >= max_loading_capacity:
-                                    overloaded.append(idx)
-                            else:
-                                if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity:
-                                    overloaded.append(idx)
-                        return overloaded
-                    
-                    def overloaded_transformer(net, max_loading_capacity_transformer):
-                        overloaded = []
-                        if df_trafo is not None:
-                            for idx, res in net.res_trafo.iterrows():
-                                val = transform_loading(res["loading_percent"])
-                                if all_real_numbers(net.res_trafo['loading_percent'].tolist()) == False:
-                                    if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity_transformer:
-                                        overloaded.append(idx)
-                                else:
-                                    if val >= max_loading_capacity_transformer:
-                                        overloaded.append(idx)
-                        return overloaded
-                    
-                    def initialize_network():
-                        net = pp.create_empty_network()
-                        for idx, row in df_bus.iterrows():
-                            pp.create_bus(net,
-                                        name=row["name"],
-                                        vn_kv=row["vn_kv"],
-                                        zone=row["zone"],
-                                        in_service=row["in_service"],
-                                        max_vm_pu=row["max_vm_pu"],
-                                        min_vm_pu=row["min_vm_pu"])
-                        for idx, row in df_load.iterrows():
-                            pp.create_load(net,
-                                        bus=row["bus"],
-                                        p_mw=row["p_mw"],
-                                        q_mvar=row["q_mvar"],
-                                        in_service=row["in_service"])
-                        for idx, row in df_gen.iterrows():
-                            if row["slack_weight"] == 1:
-                                ext_grid = pp.create_ext_grid(net,
-                                                            bus=row["bus"],
-                                                            vm_pu=row["vm_pu"],
-                                                            va_degree=0)
-                                pp.create_poly_cost(net, element=ext_grid, et="ext_grid",
-                                                    cp0_eur_per_mw=row["cp0_pkr_per_mw"],
-                                                    cp1_eur_per_mw=row["cp1_pkr_per_mw"],
-                                                    cp2_eur_per_mw=row["cp2_pkr_per_mw"],
-                                                    cp0_eur_per_mvar=row["cp0_pkr_per_mvar"],
-                                                    cq1_eur_per_mvar=row["cq1_pkr_per_mvar"],
-                                                    cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
-                            else:
-                                gen_idx = pp.create_gen(net,
-                                                        bus=row["bus"],
-                                                        p_mw=row["p_mw"],
-                                                        vm_pu=row["vm_pu"],
-                                                        min_q_mvar=row["min_q_mvar"],
-                                                        max_q_mvar=row["max_q_mvar"],
-                                                        scaling=row["scaling"],
-                                                        in_service=row["in_service"],
-                                                        slack_weight=row["slack_weight"],
-                                                        controllable=row["controllable"],
-                                                        max_p_mw=row["max_p_mw"],
-                                                        min_p_mw=row["min_p_mw"])
-                                pp.create_poly_cost(net, element=gen_idx, et="gen",
-                                                    cp0_eur_per_mw=row["cp0_pkr_per_mw"],
-                                                    cp1_eur_per_mw=row["cp1_pkr_per_mw"],
-                                                    cp2_eur_per_mw=row["cp2_pkr_per_mw"],
-                                                    cp0_eur_per_mvar=row["cp0_pkr_per_mvar"],
-                                                    cq1_eur_per_mvar=row["cq1_pkr_per_mvar"],
-                                                    cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
-                        for idx, row in df_line.iterrows():
-                            if pd.isna(row["parallel"]):
-                                continue
-                            if isinstance(row["geodata"], str):
-                                geodata = ast.literal_eval(row["geodata"])
-                            else:
-                                geodata = row["geodata"]
-                            pp.create_line_from_parameters(net,
-                                                        from_bus=row["from_bus"],
-                                                        to_bus=row["to_bus"],
-                                                        length_km=row["length_km"],
-                                                        r_ohm_per_km=row["r_ohm_per_km"],
-                                                        x_ohm_per_km=row["x_ohm_per_km"],
-                                                        c_nf_per_km=row["c_nf_per_km"],
-                                                        max_i_ka=row["max_i_ka"],
-                                                        in_service=row["in_service"],
-                                                        max_loading_percent=row["max_loading_percent"],
-                                                        geodata=geodata)
-                        if df_trafo is not None:
-                            for idx, row in df_trafo.iterrows():
-                                pp.create_transformer_from_parameters(net,
-                                                                    hv_bus=row["hv_bus"],
-                                                                    lv_bus=row["lv_bus"],
-                                                                    sn_mva=row["sn_mva"],
-                                                                    vn_hv_kv=row["vn_hv_kv"],
-                                                                    vn_lv_kv=row["vn_lv_kv"],
-                                                                    vk_percent=row["vk_percent"],
-                                                                    vkr_percent=row["vkr_percent"],
-                                                                    pfe_kw=row["pfe_kw"],
-                                                                    i0_percent=row["i0_percent"],
-                                                                    in_service=row["in_service"],
-                                                                    max_loading_percent=row["max_loading_percent"])
-                        load_dynamic = {}
-                        for col in df_load_profile.columns:
-                            m = re.match(r"p_mw_bus_(\d+)", col)
-                            if m:
-                                bus = int(m.group(1))
-                                q_col = f"q_mvar_bus_{bus}"
-                                if q_col in df_load_profile.columns:
-                                    load_dynamic[bus] = {"p": col, "q": q_col}
-                        gen_dynamic = {}
-                        for col in df_gen_profile.columns:
-                            if col.startswith("p_mw"):
-                                numbers = re.findall(r'\d+', col)
-                                if numbers:
-                                    bus = int(numbers[-1])
-                                    gen_dynamic[bus] = col
-                        return net, load_dynamic, gen_dynamic
-                    
-                    def calculate_hourly_cost(net, load_dynamic, gen_dynamic, num_hours):
-                        hourly_cost_list = []
-                        for hour in range(num_hours):
-                            for bus_id, cols in load_dynamic.items():
-                                p_val = float(df_load_profile.at[hour, cols["p"]])
-                                q_val = float(df_load_profile.at[hour, cols["q"]])
-                                mask = net.load.bus == bus_id
-                                net.load.loc[mask, "p_mw"] = p_val
-                                net.load.loc[mask, "q_mvar"] = q_val
-                            for bus_id, col in gen_dynamic.items():
-                                p_val = float(df_gen_profile.at[hour, col])
-                                if bus_id in net.ext_grid.bus.values:
-                                    mask = net.ext_grid.bus == bus_id
-                                    net.ext_grid.loc[mask, "p_mw"] = p_val
-                                else:
-                                    mask = net.gen.bus == bus_id
-                                    net.gen.loc[mask, "p_mw"] = p_val
-                            try:
-                                pp.runopp(net)
-                                hourly_cost_list.append(net.res_cost)
-                            except:
-                                hourly_cost_list.append(0)
-                        return hourly_cost_list
-                    
+                            
+        
                     def run_bau_simulation(net, load_dynamic, gen_dynamic, num_hours, line_outages, max_loading_capacity, max_loading_capacity_transformer):
                         business_as_usual_cost = calculate_hourly_cost(net, load_dynamic, gen_dynamic, num_hours)
                         cumulative_load_shedding = {bus: {"p_mw": 0.0, "q_mvar": 0.0} for bus in net.load["bus"].unique()}
@@ -1928,11 +1927,14 @@ elif selection == "Business As Usual":
                         })
                     
                     # Get max loading capacities
+                    # Get max loading capacities
                     max_loading_capacity = max(df_line['max_loading_percent'].dropna().tolist())
                     max_loading_capacity_transformer = max(df_trafo['max_loading_percent'].dropna().tolist()) if df_trafo is not None else max_loading_capacity
+                    st.session_state.max_loading_capacity = max_loading_capacity  # Store in session state
+                    st.session_state.max_loading_capacity_transformer = max_loading_capacity_transformer  # Store in session state
                     
                     # Generate outages
-                    line_outages = generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency)
+                    line_outages = generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency, df_line=df_line)
                     st.session_state.line_outages = line_outages  # Store in session state
                     
                     # Run simulation
@@ -2030,6 +2032,7 @@ elif selection == "Business As Usual":
                         
                         # Color functions
                         def get_color(pct):
+                            max_loading_capacity = st.session_state.get('max_loading_capacity', 100.0)
                             if pct is None or pct == 0:
                                 return '#000000'
                             elif pct <= (0.75 * max_loading_capacity):
@@ -2042,6 +2045,7 @@ elif selection == "Business As Usual":
                                 return '#FF0000'
                         
                         def get_color_trafo(pct):
+                            max_loading_capacity_transformer = st.session_state.get('max_loading_capacity_transformer', 100.0)
                             if pct is None or pct == 0:
                                 return '#000000'
                             elif pct <= (0.75 * max_loading_capacity_transformer):
@@ -2052,7 +2056,7 @@ elif selection == "Business As Usual":
                                 return '#FFA500'
                             else:
                                 return '#FF0000'
-                        
+                                
                         # Style function
                         def style_function(feature):
                             props = feature['properties']
