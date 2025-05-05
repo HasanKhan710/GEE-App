@@ -148,11 +148,11 @@ def overloaded_transformer(net):
                     overloaded.append(idx)
     return overloaded
 
-def Network_initialize():
+def Network_initialize(uploaded_file):
     net = pp.create_empty_network()
 
     # --- Create Buses ---
-    df_bus = pd.read_excel(path, sheet_name="Bus Parameters", index_col=0)
+    df_bus = pd.read_excel(uploaded_file, sheet_name="Bus Parameters", index_col=0)
     for idx, row in df_bus.iterrows():
         pp.create_bus(net,
                       name=row["name"],
@@ -163,7 +163,7 @@ def Network_initialize():
                       min_vm_pu=row["min_vm_pu"])
 
     # --- Create Loads ---
-    df_load = pd.read_excel(path, sheet_name="Load Parameters", index_col=0)
+    df_load = pd.read_excel(uploaded_file, sheet_name="Load Parameters", index_col=0)
     for idx, row in df_load.iterrows():
         pp.create_load(net, bus=row["bus"],
                        p_mw=row["p_mw"],
@@ -171,7 +171,7 @@ def Network_initialize():
                        in_service=row["in_service"])
 
     # --- Create Generators/External Grid ---
-    df_slack = pd.read_excel(path, sheet_name="Generator Parameters", index_col=0)
+    df_slack = pd.read_excel(uploaded_file, sheet_name="Generator Parameters", index_col=0)
     for idx, row in df_slack.iterrows():
         if row["slack_weight"] == 1:
             ext_grid = pp.create_ext_grid(net,
@@ -207,7 +207,7 @@ def Network_initialize():
                             cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
 
     # --- Create Lines ---
-    df_line = pd.read_excel(path, sheet_name="Line Parameters", index_col=0)
+    df_line = pd.read_excel(uploaded_file, sheet_name="Line Parameters", index_col=0)
     for idx, row in df_line.iterrows():
         if pd.isna(row["parallel"]):
             continue
@@ -227,9 +227,9 @@ def Network_initialize():
                                       max_loading_percent=row["max_loading_percent"],
                                       geodata=geodata)
 
-    xls = pd.ExcelFile(path)
+    xls = pd.ExcelFile(uploaded_file)
     if "Transformer Parameters" in xls.sheet_names:
-        df_trafo = pd.read_excel(path, sheet_name="Transformer Parameters", index_col=0)
+        df_trafo = pd.read_excel(uploaded_file, sheet_name="Transformer Parameters", index_col=0)
         for idx, row in df_trafo.iterrows():
             pp.create_transformer_from_parameters(net,
                 hv_bus=row["hv_bus"],
@@ -244,7 +244,7 @@ def Network_initialize():
                 in_service=row["in_service"],
                 max_loading_percent=row["max_loading_percent"])
 
-    df_load_profile = pd.read_excel(path, sheet_name="Load Profile")
+    df_load_profile = pd.read_excel(uploaded_file, sheet_name="Load Profile")
     df_load_profile.columns = df_load_profile.columns.str.strip()
     load_dynamic = {}
     for col in df_load_profile.columns:
@@ -255,7 +255,7 @@ def Network_initialize():
             if q_col in df_load_profile.columns:
                 load_dynamic[bus] = {"p": col, "q": q_col}
 
-    df_gen_profile = pd.read_excel(path, sheet_name="Generator Profile")
+    df_gen_profile = pd.read_excel(uploaded_file, sheet_name="Generator Profile")
     df_gen_profile.columns = df_gen_profile.columns.str.strip()
     gen_dynamic = {}
     for col in df_gen_profile.columns:
