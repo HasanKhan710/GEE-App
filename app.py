@@ -1718,10 +1718,10 @@ elif selection == "Business As Usual":
     # required_load_cols = ['bus', 'p_mw', 'q_mvar', 'in_service', 'criticality', 'load_coordinates']
     if "network_data" not in st.session_state or st.session_state.network_data is None:
         st.warning("Please upload and initialize network data on the Network Initialization page.")
-    elif not all(key in st.session_state.network_data for key in required_keys):
-        st.warning("Network data is incomplete. Ensure all required sheets are loaded.")
-    elif not all(col in st.session_state.network_data['df_load'].columns for col in required_load_cols):
-        st.warning("Load Parameters missing required columns (e.g., criticality, load_coordinates).")
+    # elif not all(key in st.session_state.network_data for key in required_keys):
+    #     st.warning("Network data is incomplete. Ensure all required sheets are loaded.")
+    # elif not all(col in st.session_state.network_data['df_load'].columns for col in required_load_cols):
+    #     st.warning("Load Parameters missing required columns (e.g., criticality, load_coordinates).")
     elif "line_outage_data" not in st.session_state or st.session_state.line_outage_data is None:
         st.warning("Please process weather risk data on the Weather Risk Visualisation page.")
     else:
