@@ -1933,6 +1933,7 @@ elif selection == "Business As Usual":
                     
                     # Generate outages
                     line_outages = generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency)
+                    st.session_state.line_outages = line_outages  # Store in session state
                     
                     # Run simulation
                     (business_as_usual_cost, cumulative_load_shedding, total_demand_per_bus,
@@ -2013,14 +2014,15 @@ elif selection == "Business As Usual":
                         
                         # Weather-down lines
                         weather_down_set = set()
-                        for (fbus, tbus, start_hr) in line_outages:
-                            if hour_idx >= start_hr:
-                                if check_bus_pair(df_line, df_trafo, (fbus, tbus)):
-                                    idx = trafo_idx_map.get((fbus, tbus))
-                                else:
-                                    idx = line_idx_map.get((fbus, tbus))
-                                if idx is not None:
-                                    weather_down_set.add(idx)
+                        if "line_outages" in st.session_state:
+                            for (fbus, tbus, start_hr) in st.session_state.line_outages:
+                                if hour_idx >= start_hr:
+                                    if check_bus_pair(df_line, df_trafo, (fbus, tbus)):
+                                        idx = trafo_idx_map.get((fbus, tbus))
+                                    else:
+                                        idx = line_idx_map.get((fbus, tbus))
+                                    if idx is not None:
+                                        weather_down_set.add(idx)
                         gdf["down_weather"] = gdf["idx"].apply(lambda i: i in weather_down_set)
                         
                         # Create map
