@@ -1608,15 +1608,14 @@ elif selection == "Business As Usual":
                                   color=col, fill_color=col, fill_opacity=0.5).add_to(m)
         
                 # ---------- legend (replace the whole legend_html string) ------------------
+                # ---------------- legend (overwrite your legend_html string) ---------------
                 legend_html = """
                 <style>
-                  .legend-box,* .legend-box {            /* everything inside the box */
-                      color:#000 !important;             /* force black text           */
-                  }
+                  .legend-box,* .legend-box { color:#000 !important; }
                 </style>
                 
-                <div class="legend-box"
-                     style="position:fixed; top:10px; right:10px; z-index:1000;
+                <div class="legend-box leaflet-control leaflet-bar"
+                     style="position:absolute; bottom:10px; right:10px; z-index:9999;
                             background:#ffffff; padding:8px; border:1px solid #ccc;
                             font-size:14px;">
                   <strong>Line Load Level&nbsp;(&#37; of Max)</strong><br>
@@ -1634,14 +1633,14 @@ elif selection == "Business As Usual":
                 m.get_root().html.add_child(folium.Element(legend_html))
                 
                 
-                # ---------- title (replace the whole title_html string) --------------------
+                # ---------------- title (overwrite your title_html string) -----------------
                 title_html = f"""
                 <style>
                   .map-title {{ color:#000 !important; }}
                 </style>
                 
-                <div class="map-title"
-                     style="position:fixed; top:10px; left:10px; z-index:1000;
+                <div class="map-title leaflet-control leaflet-bar"
+                     style="position:absolute; top:60px; left:10px; z-index:9999;
                             background:rgba(255,255,255,0.9); padding:4px;
                             font-size:18px; font-weight:bold;">
                   Business As Usual – Hour {hour_idx}
