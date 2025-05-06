@@ -2038,7 +2038,7 @@ elif selection == "Weather Aware System":
                  style="position:absolute; top:90px; left:10px; z-index:9999;
                         background:rgba(255,255,255,0.9); padding:4px;
                         font-size:18px; font-weight:bold;">
-              Business As Usual – Hour {hour_idx}
+              Weather Aware – Hour {h}
             </div>
             """
             m.get_root().html.add_child(folium.Element(title_html))
