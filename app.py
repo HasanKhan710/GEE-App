@@ -1710,9 +1710,25 @@ elif selection == "Weather Aware System":
         )
 
         # maps for quick look‑up (already computed once – reuse)
-        line_idx_map  = st.session_state.line_idx_map
-        trafo_idx_map = st.session_state.trafo_idx_map
+        line_idx_map  = st.session_state.get("line_idx_map", {})
+        trafo_idx_map = st.session_state.get("trafo_idx_map", {})   # ← add this
 
+        # figure out how many plain lines the network has
+        no_of_lines = len(df_line) - (len(df_trafo) if df_trafo is not None else 
+
+        # ----- build the set of indices that are out of service due to weather -----
+        weather_down = set()
+        for f, t, start_hr in line_outages:
+            if h < start_hr:
+                continue
+            is_tf = check_bus_pair(df_line, df_trafo, (f, t))
+            if is_tf:
+                idx = trafo_idx_map.get((f, t))
+            else:
+                idx = line_idx_map.get((f, t))
+            if idx is not None:
+                weather_down.add(idx)
+        
         max_line_cap  = st.session_state.max_loading_capacity
         max_trf_cap   = st.session_state.max_loading_capacity_transformer
 
