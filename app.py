@@ -2049,57 +2049,71 @@ elif selection == "Weather Aware System":
 # ────────────────────────────────────────────────────────────────────────────
 # Page 5 :  Data Analytics
 # ────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────
 elif selection == "Data Analytics":
-    import plotly.graph_objects as go     # local import to keep global header tidy
-
+    import plotly.graph_objects as go   # local import keeps top neat
     st.title("Data Analytics")
 
-    # make sure we actually have BAU + WA results available
-    if ("bau_results"      not in st.session_state or
+    # safety check ---------------------------------------------------------
+    if ("bau_results" not in st.session_state or
         "weather_aware_results" not in st.session_state or
-        st.session_state.bau_results          is None or
+        st.session_state.bau_results is None or
         st.session_state.weather_aware_results is None):
         st.info("Run **Business As Usual** and **Weather‑Aware System** first.")
         st.stop()
 
-    # pull the data we need
-    num_hours      = len(st.session_state.network_data["df_load_profile"])
-    hours          = list(range(num_hours))
+    # prepare common data --------------------------------------------------
+    num_hours       = len(st.session_state.network_data["df_load_profile"])
+    hours           = list(range(num_hours))
 
-    load_shed_bau  = st.session_state.bau_results["hourly_shed_bau"]
-    load_shed_wa   = st.session_state.weather_aware_results["hourly_shed"]
+    load_shed_bau   = st.session_state.bau_results["hourly_shed_bau"]
+    load_shed_wa    = st.session_state.weather_aware_results["hourly_shed"]
 
-    cost_bau_raw   = st.session_state.bau_results["business_as_usual_cost"]
-    cost_wa_raw    = st.session_state.weather_aware_results["cost"]
+    cost_bau_raw    = st.session_state.bau_results["business_as_usual_cost"]
+    cost_wa_raw     = st.session_state.weather_aware_results["cost"]
 
-    # scale costs to millions (as in your Colab)
-    cost_bau_mil   = [c/1e6 for c in cost_bau_raw]
-    cost_wa_mil    = [c/1e6 for c in cost_wa_raw]
+    cost_bau_mil    = [c / 1e6 for c in cost_bau_raw]      # scale to millions
+    cost_wa_mil     = [c / 1e6 for c in cost_wa_raw]
 
-    # user interaction ------------------------------------------------------
-    st.write(
-        "Would you like to see an hourly comparison of load‑shedding and costs "
-        "for the two operating modes?"
-    )
-    if st.button("Show Hourly Comparison Plot"):
-        # 1) Load‑shedding comparison --------------------------------------
+    # ---------------------------------------------------------------------
+    # persistent flags (initialise once)
+    # ---------------------------------------------------------------------
+    if "show_comp" not in st.session_state:
+        st.session_state.show_comp = False
+    if "show_diff" not in st.session_state:
+        st.session_state.show_diff = False
+
+    # ---------------------------------------------------------------------
+    # two independent buttons, always visible
+    # ---------------------------------------------------------------------
+    col_a, col_b = st.columns(2)          # just for nicer layout
+    with col_a:
+        if st.button("Show Hourly Comparison Plot"):
+            st.session_state.show_comp = True
+    with col_b:
+        if st.button("Show Cost‑Difference Plot"):
+            st.session_state.show_diff = True
+
+    # ---------------------------------------------------------------------
+    # 1) Hourly comparison (load‑shedding + side‑by‑side cost bars)
+    # ---------------------------------------------------------------------
+    if st.session_state.show_comp:
+        # --- load‑shedding figure ----------------------------------------
         fig_ls = go.Figure()
-
         fig_ls.add_trace(go.Scatter(
             x=hours, y=load_shed_bau,
             mode="lines+markers",
-            name="Projected Operation: Current OPF Load Shedding",
+            name="Current OPF Load Shedding",
             line=dict(color="rgba(99,110,250,1)", width=3),
             marker=dict(size=6)
         ))
         fig_ls.add_trace(go.Scatter(
             x=hours, y=load_shed_wa,
             mode="lines+markers",
-            name="Projected Operation: Weather‑Aware OPF Load Shedding",
+            name="Weather‑Aware OPF Load Shedding",
             line=dict(color="rgba(239,85,59,1)", width=3),
             marker=dict(size=6)
         ))
-
         fig_ls.update_layout(
             title="Hourly Load‑Shedding Comparison",
             xaxis_title="Hour (0–23)",
@@ -2110,10 +2124,9 @@ elif selection == "Data Analytics":
             width=1000, height=500,
             margin=dict(l=60, r=40, t=60, b=50)
         )
-
         st.plotly_chart(fig_ls, use_container_width=True)
 
-        # 2) Cost comparison  (optional – nice to have) --------------------
+        # --- generation‑cost bars ----------------------------------------
         fig_cost = go.Figure()
         fig_cost.add_trace(go.Bar(
             x=hours, y=cost_bau_mil,
@@ -2125,7 +2138,6 @@ elif selection == "Data Analytics":
             name="Weather‑Aware Cost",
             marker=dict(color="rgba(239,85,59,0.7)")
         ))
-
         fig_cost.update_layout(
             barmode="group",
             title="Hourly Generation Cost Comparison",
@@ -2137,61 +2149,47 @@ elif selection == "Data Analytics":
             width=1000, height=500,
             margin=dict(l=60, r=40, t=60, b=50)
         )
-
         st.plotly_chart(fig_cost, use_container_width=True)
 
-        # ------------------------------------------------------------------ #
-        # 6) Optional: cost‑difference (lost‑revenue) plot
-        # ------------------------------------------------------------------ #
-        st.write(
-            "Would you also like to see a shaded‑area plot of the hourly "
-            "generation‑cost difference (lost potential revenue)?"
+    # ---------------------------------------------------------------------
+    # 2) Cost‑difference (lost revenue) shaded‑area plot
+    # ---------------------------------------------------------------------
+    if st.session_state.show_diff:
+        cost_diff = [b - w for b, w in zip(cost_bau_mil, cost_wa_mil)]
+
+        fig_diff = go.Figure()
+        # shaded area between curves
+        fig_diff.add_trace(go.Scatter(
+            x=hours + hours[::-1],
+            y=cost_bau_mil + cost_wa_mil[::-1],
+            fill="toself",
+            fillcolor="rgba(255,140,0,0.3)",
+            line=dict(color="rgba(255,255,255,0)"),
+            hoverinfo="skip",
+            showlegend=True,
+            name="Loss of Potential Revenue (Cost Difference)"
+        ))
+        # individual curves
+        fig_diff.add_trace(go.Scatter(
+            x=hours, y=cost_bau_mil,
+            mode="lines+markers",
+            name="Current OPF Cost",
+            line=dict(color="rgba(0,204,150,1)", width=3)
+        ))
+        fig_diff.add_trace(go.Scatter(
+            x=hours, y=cost_wa_mil,
+            mode="lines+markers",
+            name="Weather‑Aware OPF Cost",
+            line=dict(color="rgba(171,99,250,1)", width=3)
+        ))
+        fig_diff.update_layout(
+            title="Potential Lost Revenue – Hourly Cost Difference",
+            xaxis_title="Hour (0–23)",
+            yaxis_title="Cost [Million PKR]",
+            xaxis=dict(tickmode="linear", dtick=1, range=[0, max(hours)]),
+            template="plotly_dark",
+            legend=dict(x=0.01, y=0.99),
+            width=1200, height=500,
+            margin=dict(l=60, r=40, t=60, b=50)
         )
-        if st.button("Show Cost‑Difference Plot"):
-            # (re‑use the variables we already prepared)
-            cost_bau_M = cost_bau_mil           # already scaled
-            cost_wa_M  = cost_wa_mil
-            cost_diff  = [b - w for b, w in zip(cost_bau_M, cost_wa_M)]
-    
-            fig_diff = go.Figure()
-    
-            # shaded area between curves --------------------------------------
-            fig_diff.add_trace(go.Scatter(
-                x=hours + hours[::-1],
-                y=cost_bau_M + cost_wa_M[::-1],
-                fill="toself",
-                fillcolor="rgba(255,140,0,0.3)",
-                line=dict(color="rgba(255,255,255,0)"),
-                hoverinfo="skip",
-                showlegend=True,
-                name="Loss of Potential Revenue (Cost Difference)"
-            ))
-            # the two cost curves ---------------------------------------------
-            fig_diff.add_trace(go.Scatter(
-                x=hours, y=cost_bau_M,
-                mode="lines+markers",
-                name="Projected Operations: Current OPF Cost",
-                line=dict(color="rgba(0,204,150,1)", width=3)
-            ))
-            fig_diff.add_trace(go.Scatter(
-                x=hours, y=cost_wa_M,
-                mode="lines+markers",
-                name="Projected Operations: Weather‑Aware OPF Cost",
-                line=dict(color="rgba(171,99,250,1)", width=3)
-            ))
-    
-            fig_diff.update_layout(
-                title="Potential Lost Revenue – Hourly Cost Difference",
-                xaxis_title="Hour (0–23)",
-                yaxis_title="Cost [Million PKR]",
-                xaxis=dict(tickmode="linear", dtick=1, range=[0, max(hours)]),
-                template="plotly_dark",
-                legend=dict(x=0.01, y=0.99),
-                width=1200, height=500,
-                margin=dict(l=60, r=40, t=60, b=50)
-            )
-    
-            st.plotly_chart(fig_diff, use_container_width=True)
-    
-    
-    
+        st.plotly_chart(fig_diff, use_container_width=True)
