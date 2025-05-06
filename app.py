@@ -1499,7 +1499,7 @@ elif selection == "Business As Usual":
         # Visualization cc
     
         # Visualization
-        st.subheader("Visualize Business As Usual") # CHANGED: Removed "Using GEE" as visualization uses Folium
+        st.subheader("Visualize Business As Usual") 
         if st.session_state.bau_results is None:
             st.info("Please run the Business As Usual analysis first.")
         else:
