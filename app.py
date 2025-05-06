@@ -2167,7 +2167,7 @@ elif selection == "Data Analytics":
             line=dict(color="rgba(255,255,255,0)"),
             hoverinfo="skip",
             showlegend=True,
-            name="Loss of Potential Revenue (Cost Difference)"
+            name="Potential Revenue Lost (Cost Difference)"
         ))
         # individual curves
         fig_diff.add_trace(go.Scatter(
