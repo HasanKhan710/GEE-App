@@ -1934,31 +1934,57 @@ elif selection == "Weather Aware System":
             # Folium map ----------------------------------------------------
             m = folium.Map(location=[27,66.5], zoom_start=7, width=800, height=600)
 
-            def col_line(p):
-                if p is None or p==0: return "#000000"
-                if p<=0.75*max_line_cap: return "#00FF00"
-                if p<=0.90*max_line_cap: return "#FFFF00"
-                if p< max_line_cap:      return "#FFA500"
-                return "#FF0000"
-            def col_trf(p):
-                if p is None or p==0: return "#000000"
-                if p<=0.75*max_trf_cap: return "#00FF00"
-                if p<=0.90*max_trf_cap: return "#FFFF00"
-                if p< max_trf_cap:      return "#FFA500"
-                return "#FF0000"
+            # ---------------------------------------------------------------------------
+            # helper: always work with a *scalar* float (or None)
+            # ---------------------------------------------------------------------------
+            def _first(x):
+                """Return a plain float/None even if x is list‑like."""
+                if isinstance(x, (list, tuple)) and len(x):
+                    return x[0]
+                try:                       # NumPy scalar → Python float
+                    import numpy as np
+                    if isinstance(x, np.generic):
+                        return float(x)
+                except ImportError:
+                    pass
+                return x                   # already scalar or None
             
-            n_trafos      = len(df_trafo) if df_trafo is not None else 0
-            line_cutoff   = len(df_line) - n_trafos          # indices ≥ cutoff → trafos
+            
+            # colour helpers that match the BAU page but are list‑safe
+            def col_line(p):
+                p = _first(p)
+                if p is None or p == 0:            return '#000000'
+                if p <= 0.75 * max_line_cap:       return '#00FF00'
+                if p <= 0.90 * max_line_cap:       return '#FFFF00'
+                if p <  max_line_cap:              return '#FFA500'
+                return '#FF0000'
+            
+            def col_trf(p):
+                p = _first(p)
+                if p is None or p == 0:            return '#000000'
+                if p <= 0.75 * max_trf_cap:        return '#00FF00'
+                if p <= 0.90 * max_trf_cap:        return '#FFFF00'
+                if p <  max_trf_cap:               return '#FFA500'
+                return '#FF0000'
 
+            # ---------------------------------------------------------------------------
+            # Weather‑Aware map‑drawing (unchanged except for the safe helpers above)
+            # ---------------------------------------------------------------------------
+            n_trafos    = len(df_trafo) if df_trafo is not None else 0
+            line_cutoff = len(df_line) - n_trafos                 # idx ≥ cut‑off ⇒ trafo
+            
             def style_ft(feat):
-                p   = feat["properties"]
-                if p.get("down_weather"):                    # paint weather‑impacted black
+                prop = feat["properties"]
+            
+                # black for weather‑impacted
+                if prop.get("down_weather", False):
                     return {"color": "#000000", "weight": 3}
             
-                pct = p.get("loading", 0.0)
-                color = col_trf(pct) if p["idx"] >= line_cutoff else col_line(pct)
-                return {"color": color, "weight": 3}
-                
+                pct   = prop.get("loading", 0.0)
+                use_t = (df_trafo is not None) and (prop["idx"] >= line_cutoff)
+                colour = col_trf(pct) if use_t else col_line(pct)
+                return {"color": colour, "weight": 3}
+    
             folium.GeoJson(gdf.__geo_interface__,
                            name=f"Transmission Net at Hour {h}",
                            style_function=style_ft).add_to(m)
