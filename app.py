@@ -1610,7 +1610,7 @@ elif selection == "Business As Usual":
                     for (fbus, tbus, start_hr) in st.session_state.line_outages:
                         if hour_idx >= start_hr:
                             is_tf = check_bus_pair(df_line, df_trafo, (fbus, tbus))
-                            idx   = trafo_idx_map.get((fbus, tbus)) if is_tf else line_idx_map.get((fbus, tbus))
+                            idx   = trafo_idx_map.get((fbus, tbus)) + no_of_lines if is_tf else line_idx_map.get((fbus, tbus))
                             if idx is not None:
                                 weather_down.add(idx)
                 gdf["down_weather"] = gdf["idx"].isin(weather_down)
@@ -1984,7 +1984,7 @@ elif selection == "Weather Aware System":
             gdf["idx"]     = gdf.index
             gdf["loading"] = gdf["idx"].map(lambda i: loadings[i] if i < len(loadings) else 0.)
             weather_down = {
-            ( trafo_idx_map.get((f, t)) if check_bus_pair(df_line, df_trafo, (f, t))
+            ( trafo_idx_map.get((f, t)) + no_of_lines if check_bus_pair(df_line, df_trafo, (f, t))
               else line_idx_map.get((f, t)) )
             for f, t, s in line_outages
             if h >= s
