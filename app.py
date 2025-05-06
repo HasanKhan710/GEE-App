@@ -355,7 +355,6 @@ if selection == "Network Initialization":
     # uploaded_file = st.file_uploader("Upload your network Excel file (e.g., Final_IEEE_9Bus_Parameters_only.xlsx)", type=["xlsx"], key="file_uploader")
 
     st.markdown(
-    "Need a template?  "
     "[Download the sample IEEE‑9 or 14 bus network parameters](https://drive.google.com/drive/folders/1oT10dY6hZiM0q3AYiFzEqe_GQ5vA-eEa?usp=sharing) "
     "from Google Drive.",
     unsafe_allow_html=True,
