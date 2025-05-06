@@ -2324,7 +2324,7 @@ elif selection == "About the App and Developers":
         ---
 
         ### Quick Links  
-        * 📄 **Full Research Thesis** – [Google Drive (PDF)](https://drive.google.com/your-thesis-link)  
+        * 📄 **Full Research Thesis** – [Google Drive (PDF)](https://drive.google.com/drive/folders/1mzGOuPhHn2UryrB2q5K4AZH2bPutvNhF?usp=drive_link)  
         * ▶️ **Video Walk‑Through / Tutorial** – [YouTube](https://youtu.be/your-tutorial-video)  
 
         ---
@@ -2357,10 +2357,12 @@ elif selection == "About the App and Developers":
         ---
 
         ### Authors & Contact  
-        * **Ahsan Example** – MSc Power Systems, ABC University  
-          * ✉️ ahsan@example.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](https://linkedin.com/in/ahsan-example)  
-        * **Fatima Example** – Research Fellow, XYZ Lab  
-          * ✉️ fatima@example.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](https://linkedin.com/in/fatima-example)
+        * **Muhammad Hasan Khan** – BSc Power Electrical Engineering, Habib University  
+          * ✉️ iamhasan710@gmail.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](www.linkedin.com/in/hasankhan710)  
+        * **Munim ul Haq** – BSc Power Electrical Engineering, Habib University  
+          * ✉️ themunimulhaq24@gmail.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](https://www.linkedin.com/in/munim-ul-haq/) 
+        * **Syed Muhammad Ammar Ali Jaffri ** – BSc Power Electrical Engineering, Habib University  
+          * ✉️ ammarjaffri6515@gmail.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](https://www.linkedin.com/in/ammarjaffri/) 
 
         _We welcome feedback, pull‑requests and collaboration enquiries._
         """,
