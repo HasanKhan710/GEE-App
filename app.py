@@ -2091,9 +2091,9 @@ elif selection == "Data Analytics":
     # --------------------------------------------------------------------- #
     # persistent UI flags
     # --------------------------------------------------------------------- #
-    for k in ("show_comp", "show_diff", "show_lines"):
+    for k in ("show_comp", "show_diff", "show_lines", "show_bus", "bus_to_plot"):
         if k not in st.session_state:
-            st.session_state[k] = False
+            st.session_state[k] = False if k != "bus_to_plot" else None
 
     # --------------------------------------------------------------------- #
     # three always‑visible buttons
@@ -2108,6 +2108,17 @@ elif selection == "Data Analytics":
     with col3:
         if st.button("Plot 3  •  Line‑Loading‑over‑Time"):
             st.session_state.show_lines = True
+    # ------------------------------------------------------------------ #
+    #  extra UI for “Plot 4”  –  pick a load‑bus & make the button
+    # ------------------------------------------------------------------ #
+    bus_options = st.session_state.network_data["df_load"]["bus"].astype(int).tolist()
+    sel_bus     = st.selectbox("Select a Load Bus for detailed served‑load comparison:",
+                               bus_options, key="bus_select")
+    
+    if st.button("Plot 4  •  Load‑Served @ Selected Bus"):
+        st.session_state.show_bus    = True
+        st.session_state.bus_to_plot = sel_bus
+
 
     # ===================================================================== #
     # PLOT 1  ─ Hourly load‑shedding + grouped cost bars
@@ -2231,3 +2242,63 @@ elif selection == "Data Analytics":
             plot_bgcolor="rgb(20,20,20)",
             showlegend=True)
         st.plotly_chart(fig_wa, use_container_width=True)
+
+
+     # ===================================================================== #
+    # PLOT 4  ─ Hourly load‑served comparison at one specific bus
+    # ===================================================================== #
+    if st.session_state.show_bus and st.session_state.bus_to_plot is not None:
+        bus       = st.session_state.bus_to_plot
+        hours     = list(range(num_hours))
+    
+        # demand series from the Load‑Profile sheet
+        demand_col = f"p_mw_bus_{bus}"
+        lp_df      = st.session_state.network_data["df_load_profile"]
+        if demand_col not in lp_df.columns:
+            st.warning(f"Column {demand_col} not found in Load Profile – cannot plot.")
+        else:
+            demand = lp_df[demand_col].tolist()
+    
+            # where does this bus sit in the served‑load lists?
+            df_load = st.session_state.network_data["df_load"]
+            try:
+                bus_idx = df_load.reset_index().index[df_load["bus"] == bus][0]
+            except IndexError:
+                st.warning(f"Bus {bus} not found in Load Parameters – cannot plot.")
+                bus_idx = None
+    
+            if bus_idx is not None:
+                served_bau = [
+                    hour[bus_idx] if hour[bus_idx] is not None else 0
+                    for hour in st.session_state.bau_results["served_load_per_hour"]
+                ]
+                served_wa  = [
+                    hour[bus_idx] if hour[bus_idx] is not None else 0
+                    for hour in st.session_state.weather_aware_results["served_load"]
+                ]
+    
+                fig_bus = go.Figure()
+                fig_bus.add_bar(x=hours, y=demand,
+                                name="Load Demand",
+                                marker=dict(color="rgba(99,110,250,0.8)"))
+                fig_bus.add_bar(x=hours, y=served_bau,
+                                name="Current OPF Served",
+                                marker=dict(color="rgba(239,85,59,0.8)"))
+                fig_bus.add_bar(x=hours, y=served_wa,
+                                name="Weather‑Aware Served",
+                                marker=dict(color="rgba(0,204,150,0.8)"))
+    
+                fig_bus.update_layout(
+                    barmode="group",
+                    title=f"Hourly Load Served – Bus {bus}",
+                    xaxis=dict(title="Hour", tickmode="linear", dtick=1),
+                    yaxis_title="Load [MWh]",
+                    template="plotly_dark",
+                    legend=dict(title="Series"),
+                    width=1200, height=600,
+                    margin=dict(l=40, r=40, t=60, b=40)
+                )
+                st.plotly_chart(fig_bus, use_container_width=True)
+
+
+
