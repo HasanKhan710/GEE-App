@@ -48,7 +48,7 @@ initialize_ee()
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
-pages = ["Network Initialization", "Weather Risk Visualisation Using GEE", "Business As Usual", "Weather Aware System"]
+pages = ["Network Initialization", "Weather Risk Visualisation Using GEE", "Business As Usual", "Weather Aware System", "Data Analytics"]
 selection = st.sidebar.radio("Go to", pages)
 
 # Shared session state initialization
