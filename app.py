@@ -1607,26 +1607,28 @@ elif selection == "Business As Usual":
                     folium.Circle((lat, lon), radius=20000,
                                   color=col, fill_color=col, fill_opacity=0.5).add_to(m)
         
-                # legend & title
                 legend_html = """
                 <div style="position: fixed; top:10px; right:10px; z-index:1000;
-                            background: white; padding: 8px; border: 1px solid #ccc;">
-                    <strong>Line Load Level&nbsp;(&#37; of Max)</strong><br>
-                    <span style='display:inline-block;width:12px;height:12px;background:#00FF00;'></span>&nbsp;Below 75&nbsp;%<br>
+                            background:#ffffff; padding:8px; border:1px solid #ccc;
+                            color:#000; font-size:14px;">
+                    <strong style="color:#000;">Line Load Level&nbsp;(&#37; of Max)</strong><br>
+                    <span style='display:inline-block;width:12px;height:12px;background:#00FF00;'></span>&nbsp;Below&nbsp;75&nbsp;%<br>
                     <span style='display:inline-block;width:12px;height:12px;background:#FFFF00;'></span>&nbsp;75–90&nbsp;%<br>
                     <span style='display:inline-block;width:12px;height:12px;background:#FFA500;'></span>&nbsp;90–100&nbsp;%<br>
                     <span style='display:inline-block;width:12px;height:12px;background:#FF0000;'></span>&nbsp;Overloaded&nbsp;>&nbsp;100&nbsp;%<br>
                     <span style='display:inline-block;width:12px;height:12px;background:#000000;'></span>&nbsp;Weather‑Impacted<br><br>
-                    <strong>Load Status</strong><br>
-                    <span style='display:inline-block;width:12px;height:12px;background:#008000;border-radius:50%;'></span>&nbsp;Fully Served<br>
-                    <span style='display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;'></span>&nbsp;Not Fully Served
+                    <strong style="color:#000;">Load Status</strong><br>
+                    <span style='display:inline-block;width:12px;height:12px;background:#008000;border-radius:50%;'></span>&nbsp;Fully&nbsp;Served<br>
+                    <span style='display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;'></span>&nbsp;Not&nbsp;Fully&nbsp;Served
                 </div>"""
+
                 m.get_root().html.add_child(folium.Element(legend_html))
         
                 title_html = f"""
                 <div style="position: fixed; top:10px; left:10px; z-index:1000;
                             font-size:18px; font-weight:bold;
-                            background: rgba(255,255,255,0.8); padding:4px;">
+                            background:rgba(255,255,255,0.9); padding:4px;
+                            color:#000;">
                     Business As Usual – Hour {hour_idx}
                 </div>"""
                 m.get_root().html.add_child(folium.Element(title_html))
