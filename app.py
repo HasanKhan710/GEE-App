@@ -1611,7 +1611,7 @@ elif selection == "Business As Usual":
                 </style>
                 
                 <div class="legend-box leaflet-control leaflet-bar"
-                     style="position:absolute; top:90px; right:10px; z-index:9999;
+                     style="position:absolute; top:90px; left:50px; z-index:9999;
                             background:#ffffff; padding:8px; border:1px solid #ccc;
                             font-size:14px; max-width:210px;">
                   <strong>Line Load Level&nbsp;(&#37; of Max)</strong><br>
