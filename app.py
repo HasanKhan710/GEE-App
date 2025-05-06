@@ -48,7 +48,7 @@ initialize_ee()
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
-pages = ["Network Initialization", "Weather Risk Visualisation Using GEE", "Business As Usual", "Weather Aware System", "Data Analytics"]
+pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Business As Usual", "Weather Aware System", "Data Analytics"]
 selection = st.sidebar.radio("Go to", pages)
 
 # Shared session state initialization
@@ -342,7 +342,73 @@ def create_map(df_line):
         st.error(f"Error creating map: {str(e)}")
         return None
 
+# ────────────────────────────────────────────────────────────────────────────
+# Page 0 :  About the App
+# ────────────────────────────────────────────────────────────────────────────
+elif selection == "About the App":
+    st.title("Continuous Monitoring of Climate Risks to Electricity Grids")
 
+    st.markdown(
+        """
+        ### Overview  
+        This Streamlit application demonstrates an **end‑to‑end decision‑support
+        workflow** for power‑system planners and operators:
+
+        1. **Network Initialization** – ingest IEEE‑style Excel parameters and visualise the grid.  
+        2. **Weather‑Risk Visualisation** – query Google Earth Engine in real‑time to map historic occurrences and *day‑ahead* extremes of temperature, precipitation and wind.  
+        3. **Business‑As‑Usual (BAU) Simulation** – run a baseline OPF / PF for 24 h under normal operating assumptions.  
+        4. **Weather‑Aware Simulation** – re‑run the 24‑hour horizon while proactively tripping lines/transformers expected to be weather‑impacted, then apply an OPF with load‑shedding logic.  
+        5. **Data Analytics** – interactive plots to compare costs, load‑shedding and line‑load evolution between BAU and Weather‑Aware modes.
+
+        The goal is to **quantify the technical and economic benefit** of risk‑aware
+        dispatch decisions—highlighting *potential lost revenue* and critical load
+        not served under various contingencies.
+
+        ---
+
+        ### Quick Links  
+        * 📄 **Full Research Thesis** – [Google Drive (PDF)](https://drive.google.com/your-thesis-link)  
+        * ▶️ **Video Walk‑Through / Tutorial** – [YouTube](https://youtu.be/your-tutorial-video)  
+
+        ---
+
+        ### Key Features
+        * **Google Earth Engine Integration** for live climate‑risk scoring  
+        * **Pandapower OPF / PF** with automated load‑shedding heuristics  
+        * **Folium‑based maps** with custom legends for line‑loading & outages  
+        * **Plotly analytics dashboard** for post‑simulation insights
+
+        ---
+
+        ### Usage Workflow
+        1. Navigate left‑hand sidebar → **Network Initialization** and upload your Excel model.  
+        2. Tune thresholds on **Weather Risk Visualisation** and press *Process*.  
+        3. Run **Business As Usual** → then **Weather Aware System**.  
+        4. Explore comparative plots in **Data Analytics**.  
+
+        *(You can re‑run any page; session‑state keeps everything consistent.)*
+
+        ---
+
+        ### Data Sources & Methodology
+        * ERA‑5 / ERA‑5‑Land reanalysis & NOAA GFS forecasts  
+        * IEEE test‑case‑style network parameters  
+        * Cost curves approximated in PKR (can be edited in the spreadsheet)  
+
+        For details, please refer to the thesis PDF or the code comments.
+
+        ---
+
+        ### Authors & Contact  
+        * **Ahsan Example** – MSc Power Systems, ABC University  
+          * ✉️ ahsan@example.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](https://linkedin.com/in/ahsan-example)  
+        * **Fatima Example** – Research Fellow, XYZ Lab  
+          * ✉️ fatima@example.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](https://linkedin.com/in/fatima-example)
+
+        _We welcome feedback, pull‑requests and collaboration enquiries._
+        """,
+        unsafe_allow_html=True
+    )
 
 # Page 1: Network Initialization
 if selection == "Network Initialization":
