@@ -351,9 +351,25 @@ if selection == "Network Initialization":
     # Secondary page-specific title
     st.header("Network Initialization")
 
-    # File uploader for the Excel file
-    uploaded_file = st.file_uploader("Upload your network Excel file (e.g., Final_IEEE_9Bus_Parameters_only.xlsx)", type=["xlsx"], key="file_uploader")
+    # # File uploader for the Excel file
+    # uploaded_file = st.file_uploader("Upload your network Excel file (e.g., Final_IEEE_9Bus_Parameters_only.xlsx)", type=["xlsx"], key="file_uploader")
 
+    st.markdown(
+    "Need a template?  "
+    "[Download the sample IEEE‑9 or 14 bus network parameters](https://drive.google.com/drive/folders/1oT10dY6hZiM0q3AYiFzEqe_GQ5vA-eEa?usp=sharing) "
+    "from Google Drive.",
+    unsafe_allow_html=True,
+    )
+    
+    # File uploader for the Excel file
+    uploaded_file = st.file_uploader(
+        "Upload your network Excel file",
+        type=["xlsx"],
+        key="file_uploader",
+        help="You can also use the template from Google Drive: "
+             "[Sample Excel](https://drive.google.com/drive/folders/1oT10dY6hZiM0q3AYiFzEqe_GQ5vA-eEa?usp=sharing)",
+    )
+    
     # Check if a new file was uploaded
     if uploaded_file is not None and st.session_state.uploaded_file_key != uploaded_file.name:
         st.session_state.show_results = False
