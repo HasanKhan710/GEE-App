@@ -1716,18 +1716,6 @@ elif selection == "Weather Aware System":
         # figure out how many plain lines the network has
         no_of_lines = len(df_line) - (len(df_trafo) if df_trafo is not None else 0)
 
-        # ----- build the set of indices that are out of service due to weather -----
-        weather_down = set()
-        for f, t, start_hr in line_outages:
-            if h < start_hr:
-                continue
-            is_tf = check_bus_pair(df_line, df_trafo, (f, t))
-            if is_tf:
-                idx = trafo_idx_map.get((f, t))
-            else:
-                idx = line_idx_map.get((f, t))
-            if idx is not None:
-                weather_down.add(idx)
         
         max_line_cap  = st.session_state.max_loading_capacity
         max_trf_cap   = st.session_state.max_loading_capacity_transformer
