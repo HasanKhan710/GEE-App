@@ -1607,32 +1607,48 @@ elif selection == "Business As Usual":
                     folium.Circle((lat, lon), radius=20000,
                                   color=col, fill_color=col, fill_opacity=0.5).add_to(m)
         
+                # ---------- legend (replace the whole legend_html string) ------------------
                 legend_html = """
-                <div style="position: fixed; top:10px; right:10px; z-index:1000;
+                <style>
+                  .legend-box,* .legend-box {            /* everything inside the box */
+                      color:#000 !important;             /* force black text           */
+                  }
+                </style>
+                
+                <div class="legend-box"
+                     style="position:fixed; top:10px; right:10px; z-index:1000;
                             background:#ffffff; padding:8px; border:1px solid #ccc;
-                            color:#000; font-size:14px;">
-                    <strong style="color:#000;">Line Load Level&nbsp;(&#37; of Max)</strong><br>
-                    <span style='display:inline-block;width:12px;height:12px;background:#00FF00;'></span>&nbsp;Below&nbsp;75&nbsp;%<br>
-                    <span style='display:inline-block;width:12px;height:12px;background:#FFFF00;'></span>&nbsp;75–90&nbsp;%<br>
-                    <span style='display:inline-block;width:12px;height:12px;background:#FFA500;'></span>&nbsp;90–100&nbsp;%<br>
-                    <span style='display:inline-block;width:12px;height:12px;background:#FF0000;'></span>&nbsp;Overloaded&nbsp;>&nbsp;100&nbsp;%<br>
-                    <span style='display:inline-block;width:12px;height:12px;background:#000000;'></span>&nbsp;Weather‑Impacted<br><br>
-                    <strong style="color:#000;">Load Status</strong><br>
-                    <span style='display:inline-block;width:12px;height:12px;background:#008000;border-radius:50%;'></span>&nbsp;Fully&nbsp;Served<br>
-                    <span style='display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;'></span>&nbsp;Not&nbsp;Fully&nbsp;Served
-                </div>"""
-
+                            font-size:14px;">
+                  <strong>Line Load Level&nbsp;(&#37; of Max)</strong><br>
+                  <span style='display:inline-block;width:12px;height:12px;background:#00FF00;'></span>&nbsp;Below&nbsp;75&nbsp;%<br>
+                  <span style='display:inline-block;width:12px;height:12px;background:#FFFF00;'></span>&nbsp;75–90&nbsp;%<br>
+                  <span style='display:inline-block;width:12px;height:12px;background:#FFA500;'></span>&nbsp;90–100&nbsp;%<br>
+                  <span style='display:inline-block;width:12px;height:12px;background:#FF0000;'></span>&nbsp;Overloaded&nbsp;>&nbsp;100&nbsp;%<br>
+                  <span style='display:inline-block;width:12px;height:12px;background:#000000;'></span>&nbsp;Weather‑Impacted<br><br>
+                
+                  <strong>Load Status</strong><br>
+                  <span style='display:inline-block;width:12px;height:12px;background:#008000;border-radius:50%;'></span>&nbsp;Fully Served<br>
+                  <span style='display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;'></span>&nbsp;Not Fully Served
+                </div>
+                """
                 m.get_root().html.add_child(folium.Element(legend_html))
-        
+                
+                
+                # ---------- title (replace the whole title_html string) --------------------
                 title_html = f"""
-                <div style="position: fixed; top:10px; left:10px; z-index:1000;
-                            font-size:18px; font-weight:bold;
+                <style>
+                  .map-title {{ color:#000 !important; }}
+                </style>
+                
+                <div class="map-title"
+                     style="position:fixed; top:10px; left:10px; z-index:1000;
                             background:rgba(255,255,255,0.9); padding:4px;
-                            color:#000;">
-                    Business As Usual – Hour {hour_idx}
-                </div>"""
+                            font-size:18px; font-weight:bold;">
+                  Business As Usual – Hour {hour_idx}
+                </div>
+                """
                 m.get_root().html.add_child(folium.Element(title_html))
-        
+
                 folium.LayerControl(collapsed=False).add_to(m)
         
                 # display
