@@ -169,28 +169,67 @@ def generate_line_outages(outage_hours, line_down, risk_scores, capped_contingen
 
 def overloaded_lines(net, max_loading_capacity):
     overloaded = []
-    for idx, res in net.res_line.iterrows():
-        val = transform_loading(res["loading_percent"])
-        if all_real_numbers(net.res_line['loading_percent'].tolist()) == False:
-            if not isinstance(val, (int, float)) or math.isnan(val) or val >= max_loading_capacity:
+    # turn loading_percent Series into a list once
+    loadings = transform_loading(net.res_line["loading_percent"])
+    real_check = all_real_numbers(net.res_line["loading_percent"].tolist())
+
+    for idx, (res, loading_val) in enumerate(zip(net.res_line.itertuples(), loadings)):
+        # grab this line’s own max
+        own_max = net.line.at[idx, "max_loading_percent"]
+        # print(f"max loading capacity @ id {id} is {own_max}.")
+
+        if not real_check:
+            # any NaN/non‑numeric or at‐limit is overloaded
+            if not isinstance(loading_val, (int, float)) or math.isnan(loading_val) or loading_val >= own_max:
                 overloaded.append(idx)
         else:
-            if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity:
+            # only truly > its own max
+            if loading_val is not None and not (isinstance(loading_val, float) and math.isnan(loading_val)) and loading_val > own_max:
                 overloaded.append(idx)
     return overloaded
 
+## Old function
+    # for idx, res in net.res_line.iterrows():
+    #     val = transform_loading(res["loading_percent"])
+    #     if all_real_numbers(net.res_line['loading_percent'].tolist()) == False:
+    #         if not isinstance(val, (int, float)) or math.isnan(val) or val >= max_loading_capacity:
+    #             overloaded.append(idx)
+    #     else:
+    #         if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity:
+    #             overloaded.append(idx)
+    # return overloaded
+
 def overloaded_transformer(net, max_loading_capacity_transformer):
     overloaded = []
-    if 'trafo' in net and net.trafo is not None:
-        for idx, res in net.res_trafo.iterrows():
-            val = transform_loading(res["loading_percent"])
-            if all_real_numbers(net.res_trafo['loading_percent'].tolist()) == False:
-                if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity_transformer:
-                    overloaded.append(idx)
-            else:
-                if val >= max_loading_capacity_transformer:
-                    overloaded.append(idx)
+    if 'trafo' not in net and net.trafo is None:
+        return overloaded
+        
+    loadings = transform_loading(net.res_trafo["loading_percent"])
+    real_check = all_real_numbers(net.res_trafo["loading_percent"].tolist())
+
+    for idx, (res, loading_val) in enumerate(zip(net.res_trafo.itertuples(), loadings)):
+        # grab this transformer’s own max
+        own_max = net.trafo.at[idx, "max_loading_percent"]
+        # print(f"max transformer capacity @ id {id} is {own_max}.")
+
+        if not real_check:
+            if loading_val is not None and not (isinstance(loading_val, float) and math.isnan(loading_val)) and loading_val >= own_max:
+                overloaded.append(idx)
+        else:
+            if loading_val > own_max:
+                overloaded.append(idx)
     return overloaded
+
+   
+    # for idx, res in net.res_trafo.iterrows():
+    #     val = transform_loading(res["loading_percent"])
+    #     if all_real_numbers(net.res_trafo['loading_percent'].tolist()) == False:
+    #         if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity_transformer:
+    #             overloaded.append(idx)
+    #     else:
+    #         if val >= max_loading_capacity_transformer:
+    #             overloaded.append(idx)
+    # return overloaded
 
 def initialize_network(df_bus, df_load, df_gen, df_line, df_trafo, df_load_profile, df_gen_profile):
     net = pp.create_empty_network()
