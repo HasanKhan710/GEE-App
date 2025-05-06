@@ -1640,7 +1640,7 @@ elif selection == "Business As Usual":
                 </style>
                 
                 <div class="map-title leaflet-control leaflet-bar"
-                     style="position:absolute; top:60px; left:10px; z-index:9999;
+                     style="position:absolute; top:90px; left:10px; z-index:9999;
                             background:rgba(255,255,255,0.9); padding:4px;
                             font-size:18px; font-weight:bold;">
                   Business As Usual – Hour {hour_idx}
