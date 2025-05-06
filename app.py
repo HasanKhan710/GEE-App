@@ -2302,7 +2302,7 @@ elif selection == "Data Analytics":
 # ────────────────────────────────────────────────────────────────────────────
 # Page 0 :  About the App
 # ────────────────────────────────────────────────────────────────────────────
-elif selection == "About the App":
+elif selection == "About the App and Developers":
     st.title("Continuous Monitoring of Climate Risks to Electricity Grids")
 
     st.markdown(
