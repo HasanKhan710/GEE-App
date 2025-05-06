@@ -2140,4 +2140,58 @@ elif selection == "Data Analytics":
 
         st.plotly_chart(fig_cost, use_container_width=True)
 
-
+        # ------------------------------------------------------------------ #
+        # 6) Optional: cost‑difference (lost‑revenue) plot
+        # ------------------------------------------------------------------ #
+        st.write(
+            "Would you also like to see a shaded‑area plot of the hourly "
+            "generation‑cost difference (lost potential revenue)?"
+        )
+        if st.button("Show Cost‑Difference Plot"):
+            # (re‑use the variables we already prepared)
+            cost_bau_M = cost_bau_mil           # already scaled
+            cost_wa_M  = cost_wa_mil
+            cost_diff  = [b - w for b, w in zip(cost_bau_M, cost_wa_M)]
+    
+            fig_diff = go.Figure()
+    
+            # shaded area between curves --------------------------------------
+            fig_diff.add_trace(go.Scatter(
+                x=hours + hours[::-1],
+                y=cost_bau_M + cost_wa_M[::-1],
+                fill="toself",
+                fillcolor="rgba(255,140,0,0.3)",
+                line=dict(color="rgba(255,255,255,0)"),
+                hoverinfo="skip",
+                showlegend=True,
+                name="Loss of Potential Revenue (Cost Difference)"
+            ))
+            # the two cost curves ---------------------------------------------
+            fig_diff.add_trace(go.Scatter(
+                x=hours, y=cost_bau_M,
+                mode="lines+markers",
+                name="Projected Operations: Current OPF Cost",
+                line=dict(color="rgba(0,204,150,1)", width=3)
+            ))
+            fig_diff.add_trace(go.Scatter(
+                x=hours, y=cost_wa_M,
+                mode="lines+markers",
+                name="Projected Operations: Weather‑Aware OPF Cost",
+                line=dict(color="rgba(171,99,250,1)", width=3)
+            ))
+    
+            fig_diff.update_layout(
+                title="Potential Lost Revenue – Hourly Cost Difference",
+                xaxis_title="Hour (0–23)",
+                yaxis_title="Cost [Million PKR]",
+                xaxis=dict(tickmode="linear", dtick=1, range=[0, max(hours)]),
+                template="plotly_dark",
+                legend=dict(x=0.01, y=0.99),
+                width=1200, height=500,
+                margin=dict(l=60, r=40, t=60, b=50)
+            )
+    
+            st.plotly_chart(fig_diff, use_container_width=True)
+    
+    
+    
