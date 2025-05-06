@@ -1907,6 +1907,9 @@ elif selection == "Weather Aware System":
 
         if st.session_state.wa_vis_hour is not None:
             h = st.session_state.wa_vis_hour
+            # --- pull branch‑index maps from session‑state ------------------------
+            line_idx_map  = st.session_state.get("line_idx_map", {})
+            trafo_idx_map = st.session_state.get("trafo_idx_map", {})
             loadings     = wa_res["loading_percent"][h]
             shed_buses_h = [b for t,b in wa_res["shedding_buses"] if t==h]
 
