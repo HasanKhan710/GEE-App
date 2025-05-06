@@ -2100,13 +2100,13 @@ elif selection == "Data Analytics":
     # --------------------------------------------------------------------- #
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("Plot 1  •  Hourly Comparison"):
+        if st.button("Hourly Load Shedding and Generation Cost Comparison"):
             st.session_state.show_comp  = True
     with col2:
-        if st.button("Plot 2  •  Cost Difference & Lost Savings"):
+        if st.button("Cost Difference & Lost Savings (BAU vs WA)"):
             st.session_state.show_diff  = True
     with col3:
-        if st.button("Plot 3  •  Line‑Loading‑over‑Time"):
+        if st.button("Line‑Loading‑over‑Time"):
             st.session_state.show_lines = True
     # ------------------------------------------------------------------ #
     #  extra UI for “Plot 4”  –  pick a load‑bus & make the button
@@ -2115,7 +2115,7 @@ elif selection == "Data Analytics":
     sel_bus     = st.selectbox("Select a Load Bus for detailed served‑load comparison:",
                                bus_options, key="bus_select")
     
-    if st.button("Plot 4  •  Load‑Served @ Selected Bus"):
+    if st.button("Load‑Served at Selected Load Bus"):
         st.session_state.show_bus    = True
         st.session_state.bus_to_plot = sel_bus
 
