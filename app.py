@@ -2046,3 +2046,98 @@ elif selection == "Weather Aware System":
             folium.LayerControl(collapsed=False).add_to(m)
             st_folium(m, width=800, height=600, key=f"wa_map_{h}")
 
+# ────────────────────────────────────────────────────────────────────────────
+# Page 5 :  Data Analytics
+# ────────────────────────────────────────────────────────────────────────────
+elif selection == "Data Analytics":
+    import plotly.graph_objects as go     # local import to keep global header tidy
+
+    st.title("Data Analytics")
+
+    # make sure we actually have BAU + WA results available
+    if ("bau_results"      not in st.session_state or
+        "weather_aware_results" not in st.session_state or
+        st.session_state.bau_results          is None or
+        st.session_state.weather_aware_results is None):
+        st.info("Run **Business As Usual** and **Weather‑Aware System** first.")
+        st.stop()
+
+    # pull the data we need
+    num_hours      = len(st.session_state.network_data["df_load_profile"])
+    hours          = list(range(num_hours))
+
+    load_shed_bau  = st.session_state.bau_results["hourly_shed_bau"]
+    load_shed_wa   = st.session_state.weather_aware_results["hourly_shed"]
+
+    cost_bau_raw   = st.session_state.bau_results["business_as_usual_cost"]
+    cost_wa_raw    = st.session_state.weather_aware_results["cost"]
+
+    # scale costs to millions (as in your Colab)
+    cost_bau_mil   = [c/1e6 for c in cost_bau_raw]
+    cost_wa_mil    = [c/1e6 for c in cost_wa_raw]
+
+    # user interaction ------------------------------------------------------
+    st.write(
+        "Would you like to see an hourly comparison of load‑shedding and costs "
+        "for the two operating modes?"
+    )
+    if st.button("Show Hourly Comparison Plot"):
+        # 1) Load‑shedding comparison --------------------------------------
+        fig_ls = go.Figure()
+
+        fig_ls.add_trace(go.Scatter(
+            x=hours, y=load_shed_bau,
+            mode="lines+markers",
+            name="Projected Operation: Current OPF Load Shedding",
+            line=dict(color="rgba(99,110,250,1)", width=3),
+            marker=dict(size=6)
+        ))
+        fig_ls.add_trace(go.Scatter(
+            x=hours, y=load_shed_wa,
+            mode="lines+markers",
+            name="Projected Operation: Weather‑Aware OPF Load Shedding",
+            line=dict(color="rgba(239,85,59,1)", width=3),
+            marker=dict(size=6)
+        ))
+
+        fig_ls.update_layout(
+            title="Hourly Load‑Shedding Comparison",
+            xaxis_title="Hour (0–23)",
+            yaxis_title="Load Shedding [MWh]",
+            xaxis=dict(tickmode="linear", dtick=1, range=[0, max(hours)]),
+            template="plotly_dark",
+            legend=dict(x=0.01, y=0.99),
+            width=1000, height=500,
+            margin=dict(l=60, r=40, t=60, b=50)
+        )
+
+        st.plotly_chart(fig_ls, use_container_width=True)
+
+        # 2) Cost comparison  (optional – nice to have) --------------------
+        fig_cost = go.Figure()
+        fig_cost.add_trace(go.Bar(
+            x=hours, y=cost_bau_mil,
+            name="BAU Cost",
+            marker=dict(color="rgba(99,110,250,0.7)")
+        ))
+        fig_cost.add_trace(go.Bar(
+            x=hours, y=cost_wa_mil,
+            name="Weather‑Aware Cost",
+            marker=dict(color="rgba(239,85,59,0.7)")
+        ))
+
+        fig_cost.update_layout(
+            barmode="group",
+            title="Hourly Generation Cost Comparison",
+            xaxis_title="Hour (0–23)",
+            yaxis_title="Cost [Million PKR]",
+            xaxis=dict(tickmode="linear", dtick=1),
+            template="plotly_dark",
+            legend=dict(x=0.01, y=0.99),
+            width=1000, height=500,
+            margin=dict(l=60, r=40, t=60, b=50)
+        )
+
+        st.plotly_chart(fig_cost, use_container_width=True)
+
+
