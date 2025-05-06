@@ -2004,28 +2004,44 @@ elif selection == "Weather Aware System":
                 folium.Circle((lat,lon), radius=20000,
                               color=col, fill_color=col, fill_opacity=0.5).add_to(m)
 
-            # title & legend  ----------------------------------------------
-            title_html = f"""
-            <div style="position:absolute; top:90px; left:10px; z-index:9999;
-                        background:rgba(255,255,255,0.9); padding:4px;
-                        font-size:18px; font-weight:bold;">Weather Aware – Hour {h}</div>"""
-            m.get_root().html.add_child(folium.Element(title_html))
-
             legend_html = """
-            <div style="position:absolute; top:150px; left:10px; z-index:9999;
-                        background:#fff; padding:8px; border:1px solid #ccc;
+            <style>
+              .legend-box,* .legend-box { color:#000 !important; }
+            </style>
+            
+            <div class="legend-box leaflet-control leaflet-bar"
+                 style="position:absolute; top:150px; left:10px; z-index:9999;
+                        background:#ffffff; padding:8px; border:1px solid #ccc;
                         font-size:14px; max-width:210px;">
               <strong>Line Load Level&nbsp;(&#37; of Max)</strong><br>
-              <span style='display:inline-block;width:12px;height:12px;background:#00FF00'></span>&nbsp;Below 75 %<br>
-              <span style='display:inline-block;width:12px;height:12px;background:#FFFF00'></span>&nbsp;75–90 %<br>
-              <span style='display:inline-block;width:12px;height:12px;background:#FFA500'></span>&nbsp;90–100 %<br>
-              <span style='display:inline-block;width:12px;height:12px;background:#FF0000'></span>&nbsp;Overloaded&nbsp;&gt;&nbsp;100 %<br>
-              <span style='display:inline-block;width:12px;height:12px;background:#000'></span>&nbsp;Weather‑Impacted<br><br>
+              <span style='display:inline-block;width:12px;height:12px;background:#00FF00;'></span>&nbsp;Below&nbsp;75&nbsp;%<br>
+              <span style='display:inline-block;width:12px;height:12px;background:#FFFF00;'></span>&nbsp;75–90&nbsp;%<br>
+              <span style='display:inline-block;width:12px;height:12px;background:#FFA500;'></span>&nbsp;90–100&nbsp;%<br>
+              <span style='display:inline-block;width:12px;height:12px;background:#FF0000;'></span>&nbsp;Overloaded&nbsp;>&nbsp;100&nbsp;%<br>
+              <span style='display:inline-block;width:12px;height:12px;background:#000000;'></span>&nbsp;Weather‑Impacted<br><br>
+            
               <strong>Load Status</strong><br>
-              <span style='display:inline-block;width:12px;height:12px;background:#008000;border-radius:50%'></span>&nbsp;Fully Served<br>
-              <span style='display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%'></span>&nbsp;Not Fully Served
-            </div>"""
+              <span style='display:inline-block;width:12px;height:12px;background:#008000;border-radius:50%;'></span>&nbsp;Fully Served<br>
+              <span style='display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;'></span>&nbsp;Not Fully Served
+            </div>
+            """
             m.get_root().html.add_child(folium.Element(legend_html))
+
+            
+            # ---------------- title (overwrite your title_html string) -----------------
+            title_html = f"""
+            <style>
+              .map-title {{ color:#000 !important; }}
+            </style>
+            
+            <div class="map-title leaflet-control leaflet-bar"
+                 style="position:absolute; top:90px; left:10px; z-index:9999;
+                        background:rgba(255,255,255,0.9); padding:4px;
+                        font-size:18px; font-weight:bold;">
+              Business As Usual – Hour {hour_idx}
+            </div>
+            """
+            m.get_root().html.add_child(folium.Element(title_html))
 
             folium.LayerControl(collapsed=False).add_to(m)
             st_folium(m, width=800, height=600, key=f"wa_map_{h}")
