@@ -1923,10 +1923,12 @@ elif selection == "Weather Aware System":
             gdf["idx"]     = gdf.index
             gdf["loading"] = gdf["idx"].map(lambda i: loadings[i] if i < len(loadings) else 0.)
             weather_down = {
-                ( trafo_idx_map.get((f,t)) if check_bus_pair(df_line, df_trafo,(f,t))
-                  else line_idx_map.get((f,t)) )
-                for f,t,s in line_outages if h>=s
+            ( trafo_idx_map.get((f, t)) if check_bus_pair(df_line, df_trafo, (f, t))
+              else line_idx_map.get((f, t)) )
+            for f, t, s in line_outages
+            if h >= s
             }
+            weather_down.discard(None)
             gdf["down_weather"] = gdf.idx.isin(weather_down)
 
             # Folium map ----------------------------------------------------
@@ -1944,13 +1946,19 @@ elif selection == "Weather Aware System":
                 if p<=0.90*max_trf_cap: return "#FFFF00"
                 if p< max_trf_cap:      return "#FFA500"
                 return "#FF0000"
-            def style_ft(feat):
-                p = feat["properties"]
-                if p.get("down_weather"): return {"color":"#000000","weight":3}
-                pct = p.get("loading",0.)
-                col = col_trf(pct) if p["idx"]>=len(df_line)-len(df_trafo or []) else col_line(pct)
-                return {"color":col,"weight":3}
+            
+            n_trafos      = len(df_trafo) if df_trafo is not None else 0
+            line_cutoff   = len(df_line) - n_trafos          # indices ≥ cutoff → trafos
 
+            def style_ft(feat):
+                p   = feat["properties"]
+                if p.get("down_weather"):                    # paint weather‑impacted black
+                    return {"color": "#000000", "weight": 3}
+            
+                pct = p.get("loading", 0.0)
+                color = col_trf(pct) if p["idx"] >= line_cutoff else col_line(pct)
+                return {"color": color, "weight": 3}
+                
             folium.GeoJson(gdf.__geo_interface__,
                            name=f"Transmission Net at Hour {h}",
                            style_function=style_ft).add_to(m)
