@@ -2357,11 +2357,11 @@ elif selection == "About the App and Developers":
         ---
 
         ### Authors & Contact  
-        * **Muhammad Hasan Khan** – BSc Power Electrical Engineering, Habib University  
+        * **Muhammad Hasan Khan** – BSc Electrical Engineering, Habib University  
           * ✉️ iamhasan710@gmail.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](www.linkedin.com/in/hasankhan710)  
-        * **Munim ul Haq** – BSc Power Electrical Engineering, Habib University  
+        * **Munim ul Haq** – BSc Electrical Engineering, Habib University  
           * ✉️ themunimulhaq24@gmail.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](https://www.linkedin.com/in/munim-ul-haq/) 
-        * **Syed Muhammad Ammar Ali Jaffri ** – BSc Power Electrical Engineering, Habib University  
+        * **Syed Muhammad Ammar Ali Jaffri** – BSc Electrical Engineering, Habib University  
           * ✉️ ammarjaffri6515@gmail.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](https://www.linkedin.com/in/ammarjaffri/) 
 
         _We welcome feedback, pull‑requests and collaboration enquiries._
