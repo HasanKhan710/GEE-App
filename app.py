@@ -1498,9 +1498,6 @@ elif selection == "Business As Usual":
 
         # Visualization cc
     
-        # ─────────────────────────────────────────────────────────────────────────────
-        # Visualization – Business As Usual (updated, no map‑caching)
-        # ─────────────────────────────────────────────────────────────────────────────
         # ────────────────────────────────────────────────────────────────────────────
         # Visualisation – Business As Usual (final fix)
         # ────────────────────────────────────────────────────────────────────────────
@@ -1608,16 +1605,15 @@ elif selection == "Business As Usual":
                                   color=col, fill_color=col, fill_opacity=0.5).add_to(m)
         
                 # ---------- legend (replace the whole legend_html string) ------------------
-                # ---------------- legend (overwrite your legend_html string) ---------------
                 legend_html = """
                 <style>
                   .legend-box,* .legend-box { color:#000 !important; }
                 </style>
                 
                 <div class="legend-box leaflet-control leaflet-bar"
-                     style="position:absolute; bottom:10px; right:10px; z-index:9999;
+                     style="position:absolute; top:90px; right:10px; z-index:9999;
                             background:#ffffff; padding:8px; border:1px solid #ccc;
-                            font-size:14px;">
+                            font-size:14px; max-width:210px;">
                   <strong>Line Load Level&nbsp;(&#37; of Max)</strong><br>
                   <span style='display:inline-block;width:12px;height:12px;background:#00FF00;'></span>&nbsp;Below&nbsp;75&nbsp;%<br>
                   <span style='display:inline-block;width:12px;height:12px;background:#FFFF00;'></span>&nbsp;75–90&nbsp;%<br>
@@ -1631,7 +1627,7 @@ elif selection == "Business As Usual":
                 </div>
                 """
                 m.get_root().html.add_child(folium.Element(legend_html))
-                
+
                 
                 # ---------------- title (overwrite your title_html string) -----------------
                 title_html = f"""
