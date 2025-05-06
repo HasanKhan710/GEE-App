@@ -1717,9 +1717,8 @@ elif selection == "Weather Aware System":
         no_of_lines = len(df_line) - (len(df_trafo) if df_trafo is not None else 0)
 
         
-        max_line_cap  = st.session_state.max_loading_capacity
-        max_trf_cap   = st.session_state.max_loading_capacity_transformer
-
+        max_line_cap = st.session_state.get("max_loading_capacity", 100.0)
+        max_trf_cap  = st.session_state.get("max_loading_capacity_transformer", max_line_cap)
         # storage  -----------------------------------------------------------
         wa_cost                = calculate_hourly_cost(
             net, load_dyn, gen_dyn, num_hours,
@@ -1911,6 +1910,12 @@ elif selection == "Weather Aware System":
             loadings     = wa_res["loading_percent"][h]
             shed_buses_h = [b for t,b in wa_res["shedding_buses"] if t==h]
 
+            # -----------------------------------------------------------------
+            # make sure the capacity limits are in scope *before* helpers exist
+            # -----------------------------------------------------------------
+            max_line_cap = st.session_state.get("max_loading_capacity", 100.0)
+            max_trf_cap  = st.session_state.get(
+                               "max_loading_capacity_transformer", max_line_cap)
             # rebuild gdf like we did in BAU visualiser ---------------------
             df_line["geodata"] = df_line.geodata.apply(
                 lambda x: [(lo,la) for la,lo in eval(x)] if isinstance(x,str) else x
