@@ -2673,53 +2673,53 @@ elif selection == "Data Insights":
     # PLOT 6 ─ Hourly generator dispatch comparison at selected generator
     # ===================================================================== #
     if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
-    gen_bus = st.session_state.gen_to_plot
-    df_load_profile = st.session_state.network_data["df_load_profile"]
-    gen_col = f"p_mw_PV{gen_bus}"
-    if gen_col not in df_load_profile.columns:
-        st.warning(f"Column {gen_col} not found in Generator Profile – cannot plot.")
-    else:
-        planned_gen = df_load_profile[gen_col].tolist()
-        # Find the index of the selected generator using gen_options
-        try:
-            gen_idx = gen_options.index(gen_bus)
-        except ValueError:
-            st.warning(f"Generator at bus {gen_bus} not found in generator list.")
+        gen_bus = st.session_state.gen_to_plot
+        df_load_profile = st.session_state.network_data["df_load_profile"]
+        gen_col = f"p_mw_PV{gen_bus}"
+        if gen_col not in df_load_profile.columns:
+            st.warning(f"Column {gen_col} not found in Generator Profile – cannot plot.")
         else:
-            served_bau = [hour[gen_idx] for hour in st.session_state.bau_results["gen_per_hour_bau"]]
-            served_wa = [hour[gen_idx] for hour in st.session_state.weather_aware_results["gen_per_hour_wa"]]
-                fig_gen = go.Figure()
-                fig_gen.add_trace(go.Bar(
-                    x=hours,
-                    y=planned_gen,
-                    name="Planned Generator Dispatch",
-                    marker=dict(color="rgba(99, 110, 250, 0.8)"),
-                ))
-                fig_gen.add_trace(go.Bar(
-                    x=hours,
-                    y=served_bau,
-                    name="Projected Operations: Current OPF",
-                    marker=dict(color="rgba(239, 85, 59, 0.8)"),
-                ))
-                fig_gen.add_trace(go.Bar(
-                    x=hours,
-                    y=served_wa,
-                    name="Projected Operations: Weather Risk Aware OPF",
-                    marker=dict(color="rgba(0, 204, 150, 0.8)"),
-                ))
-                fig_gen.update_layout(
-                    title=f"Comparison of Hourly Generator Dispatch at Generator {gen_bus}",
-                    xaxis=dict(title="Time [in Hours]", tickmode="linear"),
-                    yaxis=dict(title="Generation (MWh)"),
-                    barmode="group",
-                    template="plotly_dark",
-                    font=dict(family="Arial", size=14),
-                    legend=dict(title="Load Type"),
-                    margin=dict(l=40, r=40, t=60, b=40),
-                    height=600,
-                    width=1200
-                )
-                st.plotly_chart(fig_gen, use_container_width=True)
+            planned_gen = df_load_profile[gen_col].tolist()
+            # Find the index of the selected generator using gen_options
+            try:
+                gen_idx = gen_options.index(gen_bus)
+            except ValueError:
+                st.warning(f"Generator at bus {gen_bus} not found in generator list.")
+            else:
+                served_bau = [hour[gen_idx] for hour in st.session_state.bau_results["gen_per_hour_bau"]]
+                served_wa = [hour[gen_idx] for hour in st.session_state.weather_aware_results["gen_per_hour_wa"]]
+                    fig_gen = go.Figure()
+                    fig_gen.add_trace(go.Bar(
+                        x=hours,
+                        y=planned_gen,
+                        name="Planned Generator Dispatch",
+                        marker=dict(color="rgba(99, 110, 250, 0.8)"),
+                    ))
+                    fig_gen.add_trace(go.Bar(
+                        x=hours,
+                        y=served_bau,
+                        name="Projected Operations: Current OPF",
+                        marker=dict(color="rgba(239, 85, 59, 0.8)"),
+                    ))
+                    fig_gen.add_trace(go.Bar(
+                        x=hours,
+                        y=served_wa,
+                        name="Projected Operations: Weather Risk Aware OPF",
+                        marker=dict(color="rgba(0, 204, 150, 0.8)"),
+                    ))
+                    fig_gen.update_layout(
+                        title=f"Comparison of Hourly Generator Dispatch at Generator {gen_bus}",
+                        xaxis=dict(title="Time [in Hours]", tickmode="linear"),
+                        yaxis=dict(title="Generation (MWh)"),
+                        barmode="group",
+                        template="plotly_dark",
+                        font=dict(family="Arial", size=14),
+                        legend=dict(title="Load Type"),
+                        margin=dict(l=40, r=40, t=60, b=40),
+                        height=600,
+                        width=1200
+                    )
+                    st.plotly_chart(fig_gen, use_container_width=True)
 
 # ────────────────────────────────────────────────────────────────────────────
 # Page 0 :  About the App
