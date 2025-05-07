@@ -5198,12 +5198,12 @@ elif selection == "Weather Aware System":
            #          wa_cost[hr] = net.res_cost
            #  else:
             #  load‑shedding loop -------------------------------------------
-            while (overloaded_lines(net) or
-                   overloaded_transformer(net)):
+            while (overloaded_lines(net, max_line_cap) or
+                   overloaded_transformer(net, max_trf_cap)):
                 for crit in sorted(net.load.criticality.dropna().unique(), reverse=True):
                     for ld_idx in net.load[net.load.criticality==crit].index:
-                        if not overloaded_lines(net) and \
-                           not overloaded_transformer(net):
+                        if not overloaded_lines(net, max_line_cap) and \
+                           not overloaded_transformer(net, max_trf_cap):
                             break
                         val   = max_trf_cap if df_trafo is not None else max_line_cap
                         red_f = ((1/500)*val - .1)/2
