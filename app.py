@@ -1767,7 +1767,7 @@ elif selection == "Weather Aware System":
         trafo_idx_map = st.session_state.get("trafo_idx_map", {})   # ← add this
 
         # figure out how many plain lines the network has
-        no_of_lines = len(df_line) - (len(df_trafo) if df_trafo is not None else 0)
+        no_of_lines = len(df_line) - (len(df_trafo) if df_trafo is not None else len(df_line))
 
         
         max_line_cap = st.session_state.get("max_loading_capacity", 100.0)
