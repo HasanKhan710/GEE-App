@@ -48,7 +48,7 @@ initialize_ee()
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
-pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Projected Operation Under Current OPF", "Projected Operation Under Weather Risk Aware OPF", "Data Analytics"]
+pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Projected Operation Under Current OPF", "Projected Operation Under Weather Risk Aware OPF", "Data Insights"]
 selection = st.sidebar.radio("Go to", pages)
 
 # Shared session state initialization
@@ -2101,15 +2101,15 @@ elif selection == "Projected Operation Under Weather Risk Aware OPF":
             st_folium(m, width=800, height=600, key=f"wa_map_{h}")
 
 # ────────────────────────────────────────────────────────────────────────────
-# Page 5 :  Data Analytics
+# Page 5 :  Data Insights
 # ────────────────────────────────────────────────────────────────────────────
 # ────────────────────────────────────────────────────────────────────────────
 # ────────────────────────────────────────────────────────────────────────────
-# elif selection == "Data Analytics":
+# elif selection == "Data Insights":
 #     import plotly.graph_objects as go
 #     import plotly.express        as px
 #     import numpy                 as np
-#     st.title("Data Analytics")
+#     st.title("Data Insights")
 
 #     # --------------------------------------------------------------------- #
 #     # sanity‑check that prerequisites exist
@@ -2354,11 +2354,11 @@ elif selection == "Projected Operation Under Weather Risk Aware OPF":
 #                 )
 #                 st.plotly_chart(fig_bus, use_container_width=True)
 
-elif selection == "Data Analytics":
+elif selection == "Data Insights":
     import plotly.graph_objects as go
     import plotly.express        as px
     import numpy                 as np
-    st.title("Data Analytics")
+    st.title("Data Insights")
 
     # --------------------------------------------------------------------- #
     # Sanity-check that prerequisites exist
@@ -2738,7 +2738,7 @@ elif selection == "About the App and Developers":
         2. **Weather‑Risk Visualisation** – query Google Earth Engine in real‑time to map historic occurrences and *day‑ahead* extremes of temperature, precipitation and wind.  
         3. **Business‑As‑Usual (BAU) Simulation** – run a baseline OPF / PF for 24 h under normal operating assumptions.  
         4. **Weather‑Aware Simulation** – re‑run the 24‑hour horizon while proactively tripping lines/transformers expected to be weather‑impacted, then apply an OPF with load‑shedding logic.  
-        5. **Data Analytics** – interactive plots to compare costs, load‑shedding and line‑load evolution between BAU and Weather‑Aware modes.
+        5. **Data Insights** – interactive plots to compare costs, load‑shedding and line‑load evolution between BAU and Weather‑Aware modes.
 
         The goal is to **quantify the technical and economic benefit** of risk‑aware
         dispatch decisions—highlighting *potential lost revenue* and critical load
@@ -2764,7 +2764,7 @@ elif selection == "About the App and Developers":
         1. Navigate left‑hand sidebar → **Network Initialization** and upload your Excel model.  
         2. Tune thresholds on **Weather Risk Visualisation** and press *Process*.  
         3. Run **Projected Operation Under Current OPF** → then **Projected Operation Under Weather Risk Aware OPF**.  
-        4. Explore comparative plots in **Data Analytics**.  
+        4. Explore comparative plots in **Data Insights**.  
 
         *(You can re‑run any page; session‑state keeps everything consistent.)*
 
