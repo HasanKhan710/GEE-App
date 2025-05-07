@@ -4642,11 +4642,11 @@ elif selection == "Business As Usual":
                             try:
                                 pp.runpp(net)
                             except:
-                                business_as_usual_cost[hour] = 0
-                                served_load_per_hour.append([None] * len(net.load))
-                                gen_per_hour_bau.append([None] * len(net.res_gen))
-                                slack_per_hour_bau.append(None)
-                                loading_percent_bau.append([None] * (len(net.line) + (len(net.trafo) if df_trafo is not None else 0)))
+                                # business_as_usual_cost[hour] = 0
+                                # served_load_per_hour.append([None] * len(net.load))
+                                # gen_per_hour_bau.append([None] * len(net.res_gen))
+                                # slack_per_hour_bau.append(None)
+                                # loading_percent_bau.append([None] * (len(net.line) + (len(net.trafo) if df_trafo is not None else 0)))
                                 continue
                             
                             # Record loadings
@@ -5077,6 +5077,10 @@ elif selection == "Weather Aware System":
                 bus = net.gen.at[idx, "bus"]
                 if bus in gen_dyn:
                     net.gen.at[idx, "p_mw"] = df_gen_profile.at[hr, gen_dyn[bus]]
+           criticality_map = dict(zip(df_load["bus"], df_load["criticality"]))
+           net.load["bus"] = net.load["bus"].astype(int)
+           net.load["criticality"] = net.load["bus"].map(criticality_map)
+                            
 
             # run PF first ---------------------------------------------------
             try:
