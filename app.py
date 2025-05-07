@@ -5113,13 +5113,13 @@ elif selection == "Weather Aware System":
             # attempt OPF first ---------------------------------------------
             try:
                 pp.runopp(net)
-                if net.OPF_converged:
-                    record_loadings()
-                    wa_cost[hr] = net.res_cost
-                    serving_per_hour.append(net.load.p_mw.tolist())
-                    gen_per_hour.append(net.res_gen.p_mw.tolist())
-                    slack_per_hour.append(float(net.res_ext_grid.at[0,"p_mw"]))
-                    continue
+            #     if net.OPF_converged:
+            #         record_loadings()
+            #         wa_cost[hr] = net.res_cost
+            #         serving_per_hour.append(net.load.p_mw.tolist())
+            #         gen_per_hour.append(net.res_gen.p_mw.tolist())
+            #         slack_per_hour.append(float(net.res_ext_grid.at[0,"p_mw"]))
+            #         continue
             except Exception:
                 pass  # fall‑through to load‑shedding loop
 
