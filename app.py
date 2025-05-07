@@ -1294,10 +1294,10 @@ elif selection == "Projected Operation Under Current OPF":
         # Dropdown for contingency mode
         contingency_mode = st.selectbox(
             "Select Contingency Mode",
-            options=["Maximum Contingency Mode", "Capped Contingency Mode"],
+            options=["Maximum Contingency Mode (Includes all Expected Line Outages)", "Capped Contingency Mode (Limits outages to 20% of network lines)"],
             help="Capped: Limits outages to 20% of network lines. Maximum: Includes all outages."
         )
-        capped_contingency = contingency_mode == "Capped Contingency Mode"
+        capped_contingency = contingency_mode == "Capped Contingency Mode (Limits outages to 20% of network lines)"
         
         # Button to run analysis
         if st.button("Run Projected Operation Under Current OPF Analysis"):
@@ -1736,10 +1736,10 @@ elif selection == "Projected Operation Under Weather Risk Aware OPF":
     # contingency selection – same logic as BAU -----------------------------
     cont_mode = st.selectbox(
         "Select Contingency Mode",
-        ["Maximum Contingency Mode", "Capped Contingency Mode"],
+        ["Maximum Contingency Mode (Includes all Expected Line Outages)", "Capped Contingency Mode (Limits outages to 20% of network lines)"],
         help="Capped: ≤ 20 % of lines;  Maximum: all forecast outages."
     )
-    capped = cont_mode == "Capped Contingency Mode"
+    capped = cont_mode == "(Limits outages to 20% of network lines)"
 
     # build outages with the helper you already have
     line_out_data  = st.session_state.line_outage_data
@@ -2360,17 +2360,15 @@ elif selection == "Data Insights":
     import numpy                 as np
     st.title("Data Insights")
 
-    # --------------------------------------------------------------------- #
     # Sanity-check that prerequisites exist
-    # --------------------------------------------------------------------- #
-    if ("bau_results"           not in st.session_state or
+    if ("bau_results" not in st.session_state or
         "weather_aware_results" not in st.session_state or
-        st.session_state.bau_results            is None or
-        st.session_state.weather_aware_results  is None):
-        st.info("Run **Business As Usual** and **Weather-Aware System** first.")
+        st.session_state.bau_results is None or
+        st.session_state.weather_aware_results is None):
+        st.info("Run **Projected Operation Under Current OPF** and **Weather-Aware System** first.")
         st.stop()
 
-    # Common data ----------------------------------------------------------
+    # Common data
     num_hours        = len(st.session_state.network_data["df_load_profile"])
     hours            = list(range(num_hours))
 
@@ -2390,12 +2388,12 @@ elif selection == "Data Insights":
     line_legends     = [f"Line {r['from_bus']}-{r['to_bus']}" for _, r in df_line.iterrows()]
     palette          = px.colors.qualitative.Plotly
     colour_list      = palette * (loading_bau.shape[1] // len(palette) + 1)
-    gen_df = st.session_state.network_data["df_gen"]
-    gen_options = gen_df[gen_df["slack_weight"] != 1]["bus"].tolist()
 
-    # --------------------------------------------------------------------- #
+    # Generator data
+    gen_df = st.session_state.network_data["df_gen"]
+    gen_options = gen_df[gen_df["slack_weight"] != 1]["bus"].tolist()  # Exclude slack bus
+
     # Persistent UI flags
-    # --------------------------------------------------------------------- #
     for k in ("show_comp", "show_diff", "show_lines", "show_bus", "bus_to_plot", "show_slack", "show_gen", "gen_to_plot"):
         if k not in st.session_state:
             if k in ("bus_to_plot", "gen_to_plot"):
@@ -2403,9 +2401,7 @@ elif selection == "Data Insights":
             else:
                 st.session_state[k] = False
 
-    # --------------------------------------------------------------------- #
     # Three always-visible buttons
-    # --------------------------------------------------------------------- #
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("Hourly Load Shedding and Generation Cost Comparison"):
@@ -2417,9 +2413,7 @@ elif selection == "Data Insights":
         if st.button("Line-Loading-over-Time"):
             st.session_state.show_lines = True
 
-    # ------------------------------------------------------------------ #
     # Extra UI for “Plot 4” – Pick a load-bus & make the button
-    # ------------------------------------------------------------------ #
     bus_options = st.session_state.network_data["df_load"]["bus"].astype(int).tolist()
     sel_bus     = st.selectbox("Select a Load Bus for detailed served-load comparison:",
                                bus_options, key="bus_select")
@@ -2427,9 +2421,7 @@ elif selection == "Data Insights":
         st.session_state.show_bus    = True
         st.session_state.bus_to_plot = sel_bus
 
-    # ------------------------------------------------------------------ #
     # New UI for additional plots
-    # ------------------------------------------------------------------ #
     st.subheader("Generator Plots")
 
     # Slack generator dispatch button
@@ -2437,16 +2429,14 @@ elif selection == "Data Insights":
         st.session_state.show_slack = True
 
     # Generator dispatch selection and button
-    gen_options = st.session_state.network_data["df_load_params"]["bus"].tolist()[1:]  # Exclude slack bus (assumed first)
     sel_gen = st.selectbox("Select a Generator for dispatch comparison:", gen_options, key="gen_select")
     if st.button("Hourly Generator Dispatch at Selected Generator"):
         st.session_state.show_gen = True
         st.session_state.gen_to_plot = sel_gen
-    # ===================================================================== #
-    # PLOT 1 ─ Hourly load-shedding + grouped cost bars
-    # ===================================================================== #
+
+    # PLOT 1 – Hourly load-shedding + grouped cost bars
     if st.session_state.show_comp:
-        # — Load-shedding comparison —
+        # Load-shedding comparison
         fig_ls = go.Figure()
         fig_ls.add_trace(go.Scatter(
             x=hours, y=load_shed_bau,
@@ -2464,7 +2454,7 @@ elif selection == "Data Insights":
             width=1000, height=500, margin=dict(l=60,r=40,t=60,b=50))
         st.plotly_chart(fig_ls, use_container_width=True)
 
-        # — Grouped generation-cost bars —
+        # Grouped generation-cost bars
         fig_cost = go.Figure()
         fig_cost.add_bar(x=hours, y=cost_bau_M, name="BAU Cost",
                          marker=dict(color="rgba(99,110,250,0.7)"))
@@ -2479,11 +2469,9 @@ elif selection == "Data Insights":
             width=1000, height=500, margin=dict(l=60,r=40,t=60,b=50))
         st.plotly_chart(fig_cost, use_container_width=True)
 
-    # ===================================================================== #
-    # PLOT 2 ─ Cost-difference *and* Lost-Savings area
-    # ===================================================================== #
+    # PLOT 2 – Cost-difference *and* Lost-Savings area
     if st.session_state.show_diff:
-        # --- Cost-difference shaded area ----------------------------------
+        # Cost-difference shaded area
         fig_diff = go.Figure()
         fig_diff.add_trace(go.Scatter(
             x=hours + hours[::-1],
@@ -2508,7 +2496,7 @@ elif selection == "Data Insights":
             width=1200, height=500, margin=dict(l=60,r=40,t=60,b=50))
         st.plotly_chart(fig_diff, use_container_width=True)
 
-        # --- Lost-savings-only area plot ----------------------------------
+        # Lost-savings-only area plot
         lost_sav = [wa - bau if wa > bau else 0 for wa, bau in zip(cost_wa_M, cost_bau_M)]
         fig_lsav = go.Figure()
         fig_lsav.add_trace(go.Scatter(
@@ -2523,13 +2511,11 @@ elif selection == "Data Insights":
             template="plotly_dark", width=1000, height=500)
         st.plotly_chart(fig_lsav, use_container_width=True)
 
-    # ===================================================================== #
-    # PLOT 3 ─ Line-loading evolution (BAU & WA)
-    # ===================================================================== #
+    # PLOT 3 – Line-loading evolution (BAU & WA)
     if st.session_state.show_lines:
         x_axis = np.arange(loading_bau.shape[0])
 
-        # — BAU line-loading —
+        # BAU line-loading
         fig_bau = go.Figure()
         for idx in range(loading_bau.shape[1]):
             fig_bau.add_trace(go.Scatter(
@@ -2547,7 +2533,7 @@ elif selection == "Data Insights":
             showlegend=True)
         st.plotly_chart(fig_bau, use_container_width=True)
 
-        # — WA line-loading —
+        # WA line-loading
         fig_wa = go.Figure()
         for idx in range(loading_wa.shape[1]):
             fig_wa.add_trace(go.Scatter(
@@ -2565,9 +2551,7 @@ elif selection == "Data Insights":
             showlegend=True)
         st.plotly_chart(fig_wa, use_container_width=True)
 
-    # ===================================================================== #
-    # PLOT 4 ─ Hourly load-served comparison at one specific bus
-    # ===================================================================== #
+    # PLOT 4 – Hourly load-served comparison at one specific bus
     if st.session_state.show_bus and st.session_state.bus_to_plot is not None:
         bus       = st.session_state.bus_to_plot
         hours     = list(range(num_hours))
@@ -2621,12 +2605,9 @@ elif selection == "Data Insights":
                 )
                 st.plotly_chart(fig_bus, use_container_width=True)
 
-    # ===================================================================== #
-    # PLOT 5 ─ Hourly slack generator dispatch comparison
-    # ===================================================================== #
+    # PLOT 5 – Hourly slack generator dispatch comparison
     if st.session_state.show_slack:
-        # Assuming slack bus is the first generator (bus 0)
-        slack_bus = 0
+        slack_bus = gen_df[gen_df["slack_weight"] == 1]["bus"].iloc[0]  # Assuming slack bus is marked with slack_weight == 1
         df_load_profile = st.session_state.network_data["df_load_profile"]
         slack_col = f"p_mw_PV{slack_bus}"
         if slack_col not in df_load_profile.columns:
@@ -2636,42 +2617,40 @@ elif selection == "Data Insights":
             slack_bau = st.session_state.bau_results["slack_per_hour_bau"]
             slack_wa = st.session_state.weather_aware_results["slack_per_hour_wa"]
 
-    fig_slack = go.Figure()
-    fig_slack.add_trace(go.Bar(
-        x=hours,
-        y=planned_slack,
-        name="Planned Slack Dispatch",
-        marker_color="rgba(99, 110, 250, 0.8)"
-    ))
-    fig_slack.add_trace(go.Bar(
-        x=hours,
-        y=slack_bau,
-        name="Projected Operations: Current OPF",
-        marker_color="rgba(239, 85, 59, 0.8)"
-    ))
-    fig_slack.add_trace(go.Bar(
-        x=hours,
-        y=slack_wa,
-        name="Projected Operations: Weather Risk Aware OPF",
-        marker_color="rgba(0, 204, 150, 0.8)"
-    ))
-    fig_slack.update_layout(
-        title="Hourly Slack Generator Dispatch Comparison",
-        xaxis_title="Time [in Hour]",
-        yaxis_title="Generation (MWh)",
-        barmode="group",
-        template="plotly_dark",
-        font=dict(family="Arial", size=14),
-        legend_title="Scenario",
-        height=600,
-        width=1200,
-        margin=dict(l=50, r=50, t=70, b=40)
-    )
-    st.plotly_chart(fig_slack, use_container_width=True)
+            fig_slack = go.Figure()
+            fig_slack.add_trace(go.Bar(
+                x=hours,
+                y=planned_slack,
+                name="Planned Slack Dispatch",
+                marker_color="rgba(99, 110, 250, 0.8)"
+            ))
+            fig_slack.add_trace(go.Bar(
+                x=hours,
+                y=slack_bau,
+                name="Projected Operations: Current OPF",
+                marker_color="rgba(239, 85, 59, 0.8)"
+            ))
+            fig_slack.add_trace(go.Bar(
+                x=hours,
+                y=slack_wa,
+                name="Projected Operations: Weather Risk Aware OPF",
+                marker_color="rgba(0, 204, 150, 0.8)"
+            ))
+            fig_slack.update_layout(
+                title="Hourly Slack Generator Dispatch Comparison",
+                xaxis_title="Time [in Hour]",
+                yaxis_title="Generation (MWh)",
+                barmode="group",
+                template="plotly_dark",
+                font=dict(family="Arial", size=14),
+                legend_title="Scenario",
+                height=600,
+                width=1200,
+                margin=dict(l=50, r=50, t=70, b=40)
+            )
+            st.plotly_chart(fig_slack, use_container_width=True)
 
-    # ===================================================================== #
-    # PLOT 6 ─ Hourly generator dispatch comparison at selected generator
-    # ===================================================================== #
+    # PLOT 6 – Hourly generator dispatch comparison at selected generator
     if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
         gen_bus = st.session_state.gen_to_plot
         df_load_profile = st.session_state.network_data["df_load_profile"]
@@ -2688,38 +2667,39 @@ elif selection == "Data Insights":
             else:
                 served_bau = [hour[gen_idx] for hour in st.session_state.bau_results["gen_per_hour_bau"]]
                 served_wa = [hour[gen_idx] for hour in st.session_state.weather_aware_results["gen_per_hour_wa"]]
-    fig_gen = go.Figure()
-    fig_gen.add_trace(go.Bar(
-        x=hours,
-        y=planned_gen,
-        name="Planned Generator Dispatch",
-        marker=dict(color="rgba(99, 110, 250, 0.8)"),
-    ))
-    fig_gen.add_trace(go.Bar(
-        x=hours,
-        y=served_bau,
-        name="Projected Operations: Current OPF",
-        marker=dict(color="rgba(239, 85, 59, 0.8)"),
-    ))
-    fig_gen.add_trace(go.Bar(
-        x=hours,
-        y=served_wa,
-        name="Projected Operations: Weather Risk Aware OPF",
-        marker=dict(color="rgba(0, 204, 150, 0.8)"),
-    ))
-    fig_gen.update_layout(
-        title=f"Comparison of Hourly Generator Dispatch at Generator {gen_bus}",
-        xaxis=dict(title="Time [in Hours]", tickmode="linear"),
-        yaxis=dict(title="Generation (MWh)"),
-        barmode="group",
-        template="plotly_dark",
-        font=dict(family="Arial", size=14),
-        legend=dict(title="Load Type"),
-        margin=dict(l=40, r=40, t=60, b=40),
-        height=600,
-        width=1200
-    )
-    st.plotly_chart(fig_gen, use_container_width=True)
+
+                fig_gen = go.Figure()
+                fig_gen.add_trace(go.Bar(
+                    x=hours,
+                    y=planned_gen,
+                    name="Planned Generator Dispatch",
+                    marker=dict(color="rgba(99, 110, 250, 0.8)"),
+                ))
+                fig_gen.add_trace(go.Bar(
+                    x=hours,
+                    y=served_bau,
+                    name="Projected Operations: Current OPF",
+                    marker=dict(color="rgba(239, 85, 59, 0.8)"),
+                ))
+                fig_gen.add_trace(go.Bar(
+                    x=hours,
+                    y=served_wa,
+                    name="Projected Operations: Weather Risk Aware OPF",
+                    marker=dict(color="rgba(0, 204, 150, 0.8)"),
+                ))
+                fig_gen.update_layout(
+                    title=f"Comparison of Hourly Generator Dispatch at Generator {gen_bus}",
+                    xaxis=dict(title="Time [in Hours]", tickmode="linear"),
+                    yaxis=dict(title="Generation (MWh)"),
+                    barmode="group",
+                    template="plotly_dark",
+                    font=dict(family="Arial", size=14),
+                    legend=dict(title="Load Type"),
+                    margin=dict(l=40, r=40, t=60, b=40),
+                    height=600,
+                    width=1200
+                )
+                st.plotly_chart(fig_gen, use_container_width=True)
 
 # ────────────────────────────────────────────────────────────────────────────
 # Page 0 :  About the App
