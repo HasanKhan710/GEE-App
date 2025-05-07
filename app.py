@@ -139,7 +139,7 @@ def check_bus_pair(df_line, df_trafo, bus_pair):
     st.error(f"Line or Transformer {from_bus}-{to_bus} not present in network.")
     return None
 
-def generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency_mode=True, df_line=None):
+def generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency_mode=False, df_line=None):
     if not outage_hours or not line_down or not risk_scores or df_line is None:
         return []
     no_of_lines_in_network = len(df_line) - 1
@@ -1297,7 +1297,7 @@ elif selection == "Business As Usual":
             options=["Capped Contingency Mode", "Maximum Contingency Mode"],
             help="Capped: Limits outages to 20% of network lines. Maximum: Includes all outages."
         )
-        capped_contingency = contingency_mode == "Capped Contingency Mode"
+        capped_contingency = contingency_mode == "Maximum Contingency Mode"
         
         # Button to run analysis
         if st.button("Run Business As Usual Analysis"):
@@ -1739,7 +1739,7 @@ elif selection == "Weather Aware System":
         ["Capped Contingency Mode", "Maximum Contingency Mode"],
         help="Capped: ≤ 20 % of lines;  Maximum: all forecast outages."
     )
-    capped = cont_mode == "Capped Contingency Mode"
+    capped = cont_mode == "Maximum Contingency Mode"
 
     # build outages with the helper you already have
     line_out_data  = st.session_state.line_outage_data
