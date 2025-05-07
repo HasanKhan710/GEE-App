@@ -1434,7 +1434,7 @@ elif selection == "Projected Operation Under Current OPF":
                                     if mask_tf.any():
                                         for tf_idx in net.trafo[mask_tf].index:
                                             net.trafo.at[tf_idx, "in_service"] = False
-                                else is_trafo == False:
+                                else:
                                     idx = line_idx_map.get((fbus, tbus))
                                     if idx is not None:
                                         net.line.at[idx, "in_service"] = False
