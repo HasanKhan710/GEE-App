@@ -139,7 +139,7 @@ def check_bus_pair(df_line, df_trafo, bus_pair):
     st.error(f"Line or Transformer {from_bus}-{to_bus} not present in network.")
     return None
 
-def generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency_mode=False, df_line=None):
+def generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency_mode=True, df_line=None):
     if not outage_hours or not line_down or not risk_scores or df_line is None:
         return []
     no_of_lines_in_network = len(df_line) - 1
