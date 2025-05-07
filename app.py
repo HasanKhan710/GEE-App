@@ -1294,10 +1294,10 @@ elif selection == "Business As Usual":
         # Dropdown for contingency mode
         contingency_mode = st.selectbox(
             "Select Contingency Mode",
-            options=["Capped Contingency Mode", "Maximum Contingency Mode"],
+            options=["Maximum Contingency Mode", "Capped Contingency Mode"],
             help="Capped: Limits outages to 20% of network lines. Maximum: Includes all outages."
         )
-        capped_contingency = contingency_mode == "Maximum Contingency Mode"
+        capped_contingency = contingency_mode == "Capped Contingency Mode"
         
         # Button to run analysis
         if st.button("Run Business As Usual Analysis"):
@@ -1736,10 +1736,10 @@ elif selection == "Weather Aware System":
     # contingency selection – same logic as BAU -----------------------------
     cont_mode = st.selectbox(
         "Select Contingency Mode",
-        ["Capped Contingency Mode", "Maximum Contingency Mode"],
+        ["Maximum Contingency Mode", "Capped Contingency Mode"],
         help="Capped: ≤ 20 % of lines;  Maximum: all forecast outages."
     )
-    capped = cont_mode == "Maximum Contingency Mode"
+    capped = cont_mode == "Capped Contingency Mode"
 
     # build outages with the helper you already have
     line_out_data  = st.session_state.line_outage_data
