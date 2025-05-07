@@ -1456,7 +1456,7 @@ elif selection == "Projected Operation Under Current OPF":
                                 bus = net.gen.at[idx, "bus"]
                                 if bus in gen_dynamic:
                                     p = df_gen_profile.at[hour, gen_dynamic[bus]]                                    net.gen.at[idx, "p_mw"] = p
-                                    net.load.at[idx, "p_mw"] = p
+                                    net.gen.at[idx, "p_mw"] = p
                             
                             # Update criticality
                             criticality_map = dict(zip(df_load["bus"], df_load["criticality"]))
