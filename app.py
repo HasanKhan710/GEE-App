@@ -1416,10 +1416,10 @@ elif selection == "Projected Operation Under Current OPF":
                         shedding_buses = []
                         
                         for hour in range(num_hours):
-                            # Reset network state
-                            net.line["in_service"] = True
-                            if df_trafo is not None:
-                                net.trafo["in_service"] = True
+                            # # Reset network state
+                            # net.line["in_service"] = False
+                            # if df_trafo is not None:
+                            #     net.trafo["in_service"] = True
                             
                             # Apply outages
                             for (fbus, tbus, start_hr) in line_outages:
@@ -1434,7 +1434,7 @@ elif selection == "Projected Operation Under Current OPF":
                                     if mask_tf.any():
                                         for tf_idx in net.trafo[mask_tf].index:
                                             net.trafo.at[tf_idx, "in_service"] = False
-                                elif is_trafo == False:
+                                else is_trafo == False:
                                     idx = line_idx_map.get((fbus, tbus))
                                     if idx is not None:
                                         net.line.at[idx, "in_service"] = False
