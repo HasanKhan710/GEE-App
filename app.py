@@ -4642,11 +4642,11 @@ elif selection == "Business As Usual":
                             try:
                                 pp.runpp(net)
                             except:
-                                # business_as_usual_cost[hour] = 0
-                                # served_load_per_hour.append([None] * len(net.load))
-                                # gen_per_hour_bau.append([None] * len(net.res_gen))
-                                # slack_per_hour_bau.append(None)
-                                # loading_percent_bau.append([None] * (len(net.line) + (len(net.trafo) if df_trafo is not None else 0)))
+                                business_as_usual_cost[hour] = 0
+                                served_load_per_hour.append([None] * len(net.load))
+                                gen_per_hour_bau.append([None] * len(net.res_gen))
+                                slack_per_hour_bau.append(None)
+                                loading_percent_bau.append([None] * (len(net.line) + (len(net.trafo) if df_trafo is not None else 0)))
                                 continue
                             
                             # Record loadings
