@@ -2356,8 +2356,8 @@ elif selection == "Projected Operation Under Weather Risk Aware OPF":
 
 elif selection == "Data Insights":
     import plotly.graph_objects as go
-    import plotly.express        as px
-    import numpy                 as np
+    import plotly.express as px
+    import numpy as np
     st.title("Data Insights")
 
     # Sanity-check that prerequisites exist
@@ -2369,25 +2369,25 @@ elif selection == "Data Insights":
         st.stop()
 
     # Common data
-    num_hours        = len(st.session_state.network_data["df_load_profile"])
-    hours            = list(range(num_hours))
+    num_hours = len(st.session_state.network_data["df_load_profile"])
+    hours = list(range(num_hours))
 
-    load_shed_bau    = st.session_state.bau_results["hourly_shed_bau"]
-    load_shed_wa     = st.session_state.weather_aware_results["hourly_shed"]
+    load_shed_bau = st.session_state.bau_results["hourly_shed_bau"]
+    load_shed_wa = st.session_state.weather_aware_results["hourly_shed"]
 
-    cost_bau_raw     = st.session_state.bau_results["business_as_usual_cost"]
-    cost_wa_raw      = st.session_state.weather_aware_results["cost"]
-    cost_bau_M       = [c/1e6 for c in cost_bau_raw]      # scale to millions
-    cost_wa_M        = [c/1e6 for c in cost_wa_raw]
+    cost_bau_raw = st.session_state.bau_results["business_as_usual_cost"]
+    cost_wa_raw = st.session_state.weather_aware_results["cost"]
+    cost_bau_M = [c/1e6 for c in cost_bau_raw]  # Scale to millions
+    cost_wa_M = [c/1e6 for c in cost_wa_raw]
 
-    df_line          = st.session_state.network_data["df_line"]
-    loading_bau      = np.array(st.session_state.bau_results["loading_percent_bau"])
-    loading_wa       = np.array(st.session_state.weather_aware_results["loading_percent"])
+    df_line = st.session_state.network_data["df_line"]
+    loading_bau = np.array(st.session_state.bau_results["loading_percent_bau"])
+    loading_wa = np.array(st.session_state.weather_aware_results["loading_percent"])
 
     # Line legend helpers
-    line_legends     = [f"Line {r['from_bus']}-{r['to_bus']}" for _, r in df_line.iterrows()]
-    palette          = px.colors.qualitative.Plotly
-    colour_list      = palette * (loading_bau.shape[1] // len(palette) + 1)
+    line_legends = [f"Line {r['from_bus']}-{r['to_bus']}" for _, r in df_line.iterrows()]
+    palette = px.colors.qualitative.Plotly
+    colour_list = palette * (loading_bau.shape[1] // len(palette) + 1)
 
     # Generator data
     gen_df = st.session_state.network_data["df_gen"]
@@ -2405,20 +2405,20 @@ elif selection == "Data Insights":
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("Hourly Load Shedding and Generation Cost Comparison"):
-            st.session_state.show_comp  = True
+            st.session_state.show_comp = True
     with col2:
         if st.button("Cost Difference & Lost Savings (BAU vs WA)"):
-            st.session_state.show_diff  = True
+            st.session_state.show_diff = True
     with col3:
         if st.button("Line-Loading-over-Time"):
             st.session_state.show_lines = True
 
     # Extra UI for “Plot 4” – Pick a load-bus & make the button
     bus_options = st.session_state.network_data["df_load"]["bus"].astype(int).tolist()
-    sel_bus     = st.selectbox("Select a Load Bus for detailed served-load comparison:",
-                               bus_options, key="bus_select")
+    sel_bus = st.selectbox("Select a Load Bus for detailed served-load comparison:",
+                           bus_options, key="bus_select")
     if st.button("Load-Served at Selected Load Bus"):
-        st.session_state.show_bus    = True
+        st.session_state.show_bus = True
         st.session_state.bus_to_plot = sel_bus
 
     # New UI for additional plots
@@ -2445,7 +2445,7 @@ elif selection == "Data Insights":
         fig_ls.add_trace(go.Scatter(
             x=hours, y=load_shed_wa,
             mode="lines+markers", name="Weather-Aware Load Shedding",
-            line=dict(color="rgba(239,85,59,1)",  width=3), marker=dict(size=6)))
+            line=dict(color="rgba(239,85,59,1)", width=3), marker=dict(size=6)))
         fig_ls.update_layout(
             title="Hourly Load-Shedding Comparison",
             xaxis=dict(title="Hour (0–23)", tickmode="linear", dtick=1),
@@ -2458,7 +2458,7 @@ elif selection == "Data Insights":
         fig_cost = go.Figure()
         fig_cost.add_bar(x=hours, y=cost_bau_M, name="BAU Cost",
                          marker=dict(color="rgba(99,110,250,0.7)"))
-        fig_cost.add_bar(x=hours, y=cost_wa_M,  name="Weather-Aware Cost",
+        fig_cost.add_bar(x=hours, y=cost_wa_M, name="Weather-Aware Cost",
                          marker=dict(color="rgba(239,85,59,0.7)"))
         fig_cost.update_layout(
             barmode="group",
@@ -2553,17 +2553,17 @@ elif selection == "Data Insights":
 
     # PLOT 4 – Hourly load-served comparison at one specific bus
     if st.session_state.show_bus and st.session_state.bus_to_plot is not None:
-        bus       = st.session_state.bus_to_plot
-        hours     = list(range(num_hours))
-    
+        bus = st.session_state.bus_to_plot
+        hours = list(range(num_hours))
+
         # Demand series from the Load-Profile sheet
         demand_col = f"p_mw_bus_{bus}"
-        lp_df      = st.session_state.network_data["df_load_profile"]
+        lp_df = st.session_state.network_data["df_load_profile"]
         if demand_col not in lp_df.columns:
             st.warning(f"Column {demand_col} not found in Load Profile – cannot plot.")
         else:
             demand = lp_df[demand_col].tolist()
-    
+
             # Where does this bus sit in the served-load lists?
             df_load = st.session_state.network_data["df_load"]
             try:
@@ -2571,17 +2571,17 @@ elif selection == "Data Insights":
             except IndexError:
                 st.warning(f"Bus {bus} not found in Load Parameters – cannot plot.")
                 bus_idx = None
-    
+
             if bus_idx is not None:
                 served_bau = [
                     hour[bus_idx] if hour[bus_idx] is not None else 0
                     for hour in st.session_state.bau_results["served_load_per_hour"]
                 ]
-                served_wa  = [
+                served_wa = [
                     hour[bus_idx] if hour[bus_idx] is not None else 0
                     for hour in st.session_state.weather_aware_results["served_load"]
                 ]
-    
+
                 fig_bus = go.Figure()
                 fig_bus.add_bar(x=hours, y=demand,
                                 name="Load Demand",
@@ -2592,7 +2592,7 @@ elif selection == "Data Insights":
                 fig_bus.add_bar(x=hours, y=served_wa,
                                 name="Weather-Aware Served",
                                 marker=dict(color="rgba(0,204,150,0.8)"))
-    
+
                 fig_bus.update_layout(
                     barmode="group",
                     title=f"Hourly Load Served – Bus {bus}",
@@ -2608,14 +2608,14 @@ elif selection == "Data Insights":
     # PLOT 5 – Hourly slack generator dispatch comparison
     if st.session_state.show_slack:
         slack_bus = gen_df[gen_df["slack_weight"] == 1]["bus"].iloc[0]  # Assuming slack bus is marked with slack_weight == 1
-        df_gen_profile = st.session_state.network_data["df_gen_profile"]  # Use generator profile dataframe
-        slack_col = f"p_mw_bus_{slack_bus}"  # Correct column name format
+        df_gen_profile = st.session_state.network_data["df_gen_profile"]
+        slack_col = f"p_mw_bus_{slack_bus}"
         if slack_col not in df_gen_profile.columns:
             st.warning(f"Column {slack_col} not found in Generator Profile – cannot plot.")
         else:
             planned_slack = df_gen_profile[slack_col].tolist()
-            slack_bau = st.session_state.bau_results["slack_per_hour_bau"]
-            slack_wa = st.session_state.weather_aware_results["slack_per_hour_wa"]
+            slack_bau = st.session_state.bau_results["slack_per_hour"]
+            slack_wa = st.session_state.weather_aware_results["slack_per_hour"]
 
             fig_slack = go.Figure()
             fig_slack.add_trace(go.Bar(
@@ -2653,20 +2653,23 @@ elif selection == "Data Insights":
     # PLOT 6 – Hourly generator dispatch comparison at selected generator
     if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
         gen_bus = st.session_state.gen_to_plot
-        df_gen_profile = st.session_state.network_data["df_gen_profile"]  # Use generator profile dataframe
-        gen_col = f"p_mw_bus_{gen_bus}"  # Correct column name format
+        df_gen_profile = st.session_state.network_data["df_gen_profile"]
+        gen_col = f"p_mw_bus_{gen_bus}"
         if gen_col not in df_gen_profile.columns:
             st.warning(f"Column {gen_col} not found in Generator Profile – cannot plot.")
         else:
             planned_gen = df_gen_profile[gen_col].tolist()
-            # Find the index of the selected generator using gen_options
+            # Find the index of the selected generator in the generator DataFrame
             try:
-                gen_idx = gen_options.index(gen_bus)
-            except ValueError:
+                gen_idx = gen_df[gen_df["bus"] == gen_bus].index[0]
+                # Adjust index for non-slack generators (since gen_per_hour excludes slack)
+                non_slack_indices = gen_df[gen_df["slack_weight"] != 1].index.tolist()
+                adjusted_gen_idx = non_slack_indices.index(gen_idx)
+            except (IndexError, ValueError):
                 st.warning(f"Generator at bus {gen_bus} not found in generator list.")
             else:
-                served_bau = [hour[gen_idx] for hour in st.session_state.bau_results["gen_per_hour_bau"]]
-                served_wa = [hour[gen_idx] for hour in st.session_state.weather_aware_results["gen_per_hour_wa"]]
+                served_bau = [hour[adjusted_gen_idx] for hour in st.session_state.bau_results["gen_per_hour"]]
+                served_wa = [hour[adjusted_gen_idx] for hour in st.session_state.weather_aware_results["gen_per_hour"]]
 
                 fig_gen = go.Figure()
                 fig_gen.add_trace(go.Bar(
