@@ -5081,7 +5081,7 @@ elif selection == "Weather Aware System":
             # Update criticality
             criticality_map = dict(zip(df_load["bus"], df_load["criticality"]))
             net.load["bus"] = net.load["bus"].astype(int)
-            net.load["criticality"] = net.load["bus"].map(criticality_map                        
+            net.load["criticality"] = net.load["bus"].map(criticality_map)                        
 
             # run PF first ---------------------------------------------------
             try:
