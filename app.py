@@ -2608,12 +2608,12 @@ elif selection == "Data Insights":
     # PLOT 5 – Hourly slack generator dispatch comparison
     if st.session_state.show_slack:
         slack_bus = gen_df[gen_df["slack_weight"] == 1]["bus"].iloc[0]  # Assuming slack bus is marked with slack_weight == 1
-        df_load_profile = st.session_state.network_data["df_load_profile"]
-        slack_col = f"p_mw_PV{slack_bus}"
-        if slack_col not in df_load_profile.columns:
+        df_gen_profile = st.session_state.network_data["df_gen_profile"]  # Use generator profile dataframe
+        slack_col = f"p_mw_bus_{slack_bus}"  # Correct column name format
+        if slack_col not in df_gen_profile.columns:
             st.warning(f"Column {slack_col} not found in Generator Profile – cannot plot.")
         else:
-            planned_slack = df_load_profile[slack_col].tolist()
+            planned_slack = df_gen_profile[slack_col].tolist()
             slack_bau = st.session_state.bau_results["slack_per_hour_bau"]
             slack_wa = st.session_state.weather_aware_results["slack_per_hour_wa"]
 
@@ -2653,12 +2653,12 @@ elif selection == "Data Insights":
     # PLOT 6 – Hourly generator dispatch comparison at selected generator
     if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
         gen_bus = st.session_state.gen_to_plot
-        df_load_profile = st.session_state.network_data["df_load_profile"]
-        gen_col = f"p_mw_PV{gen_bus}"
-        if gen_col not in df_load_profile.columns:
+        df_gen_profile = st.session_state.network_data["df_gen_profile"]  # Use generator profile dataframe
+        gen_col = f"p_mw_bus_{gen_bus}"  # Correct column name format
+        if gen_col not in df_gen_profile.columns:
             st.warning(f"Column {gen_col} not found in Generator Profile – cannot plot.")
         else:
-            planned_gen = df_load_profile[gen_col].tolist()
+            planned_gen = df_gen_profile[gen_col].tolist()
             # Find the index of the selected generator using gen_options
             try:
                 gen_idx = gen_options.index(gen_bus)
