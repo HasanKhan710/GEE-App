@@ -334,106 +334,106 @@ def initialize_network(df_bus, df_load, df_gen, df_line, df_trafo, df_load_profi
     
     return net, load_dynamic, gen_dynamic
 
-# def calculate_hourly_cost(net, load_dynamic, gen_dynamic, num_hours, df_load_profile, df_gen_profile):
-#     hourly_cost_list = []
-#     for hour in range(num_hours):
-#         for bus_id, cols in load_dynamic.items():
-#             p_val = float(df_load_profile.at[hour, cols["p"]])
-#             q_val = float(df_load_profile.at[hour, cols["q"]])
-#             mask = net.load.bus == bus_id
-#             net.load.loc[mask, "p_mw"] = p_val
-#             net.load.loc[mask, "q_mvar"] = q_val
-#         for bus_id, col in gen_dynamic.items():
-#             p_val = float(df_gen_profile.at[hour, col])
-#             if bus_id in net.ext_grid.bus.values:
-#                 mask = net.ext_grid.bus == bus_id
-#                 net.ext_grid.loc[mask, "p_mw"] = p_val
-#             else:
-#                 mask = net.gen.bus == bus_id
-#                 net.gen.loc[mask, "p_mw"] = p_val
-#         try:
-#             pp.runopp(net)
-#             hourly_cost_list.append(net.res_cost)
-#         except:
-#             hourly_cost_list.append(0)
-#     return hourly_cost_list
-
 def calculate_hourly_cost(net, load_dynamic, gen_dynamic, num_hours, df_load_profile, df_gen_profile):
-    """
-    Calculate hourly generation costs by running OPF for each hour, updating load and generation profiles.
-    
-    Args:
-        net: Pandapower network object
-        load_dynamic: Dict mapping bus ID to load profile columns {bus: {"p": col_name, "q": col_name}}
-        gen_dynamic: Dict mapping bus ID to generator profile column {bus: col_name}
-        num_hours: Number of hours to simulate
-        df_load_profile: DataFrame with load profile data
-        df_gen_profile: DataFrame with generator profile data
-    
-    Returns:
-        List of hourly generation costs (net.res_cost or 0 if OPF fails)
-    """
-    import pandapower as pp
-    import streamlit as st
-    import numpy as np
-    
     hourly_cost_list = []
-    
-    # Create a deep copy of the network to avoid modifying the original
-    net = net.deepcopy()
-    
     for hour in range(num_hours):
-        # Update loads for this hour
         for bus_id, cols in load_dynamic.items():
-            try:
-                p_val = float(df_load_profile.at[hour, cols["p"]])
-                q_val = float(df_load_profile.at[hour, cols["q"]])
-                # Find all loads at this bus
-                mask = net.load.bus == bus_id
-                if mask.sum() == 0:
-                    st.warning(f"No load found for bus {bus_id} at hour {hour}")
-                    continue
-                net.load.loc[mask, "p_mw"] = p_val
-                net.load.loc[mask, "q_mvar"] = q_val
-            except Exception as e:
-                st.warning(f"Error updating load for bus {bus_id} at hour {hour}: {e}")
-                continue
-        
-        # Update generation for this hour
+            p_val = float(df_load_profile.at[hour, cols["p"]])
+            q_val = float(df_load_profile.at[hour, cols["q"]])
+            mask = net.load.bus == bus_id
+            net.load.loc[mask, "p_mw"] = p_val
+            net.load.loc[mask, "q_mvar"] = q_val
         for bus_id, col in gen_dynamic.items():
-            try:
-                p_val = float(df_gen_profile.at[hour, col])
-                # Check if this bus is an ext_grid (slack bus)
-                if bus_id in net.ext_grid.bus.values:
-                    mask = net.ext_grid.bus == bus_id
-                    if mask.sum() == 0:
-                        st.warning(f"No ext_grid found for bus {bus_id} at hour {hour}")
-                        continue
-                    net.ext_grid.loc[mask, "p_mw"] = p_val
-                else:
-                    mask = net.gen.bus == bus_id
-                    if mask.sum() == 0:
-                        st.warning(f"No generator found for bus {bus_id} at hour {hour}")
-                        continue
-                    net.gen.loc[mask, "p_mw"] = p_val
-            except Exception as e:
-                st.warning(f"Error updating generator for bus {bus_id} at hour {hour}: {e}")
-                continue
-        
-        # Run OPF and collect cost
+            p_val = float(df_gen_profile.at[hour, col])
+            if bus_id in net.ext_grid.bus.values:
+                mask = net.ext_grid.bus == bus_id
+                net.ext_grid.loc[mask, "p_mw"] = p_val
+            else:
+                mask = net.gen.bus == bus_id
+                net.gen.loc[mask, "p_mw"] = p_val
         try:
             pp.runopp(net)
-            if net.OPF_converged:
-                cost = float(net.res_cost) if not np.isnan(net.res_cost) else 0
-                hourly_cost_list.append(cost)
-            else:
-                st.warning(f"OPF did not converge at hour {hour}")
-                hourly_cost_list.append(0)
-        except Exception as e:
-            st.warning(f"OPF failed at hour {hour}: {e}")
+            hourly_cost_list.append(net.res_cost)
+        except:
             hourly_cost_list.append(0)
-    
     return hourly_cost_list
+
+# def calculate_hourly_cost(net, load_dynamic, gen_dynamic, num_hours, df_load_profile, df_gen_profile):
+#     """
+#     Calculate hourly generation costs by running OPF for each hour, updating load and generation profiles.
+    
+#     Args:
+#         net: Pandapower network object
+#         load_dynamic: Dict mapping bus ID to load profile columns {bus: {"p": col_name, "q": col_name}}
+#         gen_dynamic: Dict mapping bus ID to generator profile column {bus: col_name}
+#         num_hours: Number of hours to simulate
+#         df_load_profile: DataFrame with load profile data
+#         df_gen_profile: DataFrame with generator profile data
+    
+#     Returns:
+#         List of hourly generation costs (net.res_cost or 0 if OPF fails)
+#     """
+#     import pandapower as pp
+#     import streamlit as st
+#     import numpy as np
+    
+#     hourly_cost_list = []
+    
+#     # Create a deep copy of the network to avoid modifying the original
+#     net = net.deepcopy()
+    
+#     for hour in range(num_hours):
+#         # Update loads for this hour
+#         for bus_id, cols in load_dynamic.items():
+#             try:
+#                 p_val = float(df_load_profile.at[hour, cols["p"]])
+#                 q_val = float(df_load_profile.at[hour, cols["q"]])
+#                 # Find all loads at this bus
+#                 mask = net.load.bus == bus_id
+#                 if mask.sum() == 0:
+#                     st.warning(f"No load found for bus {bus_id} at hour {hour}")
+#                     continue
+#                 net.load.loc[mask, "p_mw"] = p_val
+#                 net.load.loc[mask, "q_mvar"] = q_val
+#             except Exception as e:
+#                 st.warning(f"Error updating load for bus {bus_id} at hour {hour}: {e}")
+#                 continue
+        
+#         # Update generation for this hour
+#         for bus_id, col in gen_dynamic.items():
+#             try:
+#                 p_val = float(df_gen_profile.at[hour, col])
+#                 # Check if this bus is an ext_grid (slack bus)
+#                 if bus_id in net.ext_grid.bus.values:
+#                     mask = net.ext_grid.bus == bus_id
+#                     if mask.sum() == 0:
+#                         st.warning(f"No ext_grid found for bus {bus_id} at hour {hour}")
+#                         continue
+#                     net.ext_grid.loc[mask, "p_mw"] = p_val
+#                 else:
+#                     mask = net.gen.bus == bus_id
+#                     if mask.sum() == 0:
+#                         st.warning(f"No generator found for bus {bus_id} at hour {hour}")
+#                         continue
+#                     net.gen.loc[mask, "p_mw"] = p_val
+#             except Exception as e:
+#                 st.warning(f"Error updating generator for bus {bus_id} at hour {hour}: {e}")
+#                 continue
+        
+#         # Run OPF and collect cost
+#         try:
+#             pp.runopp(net)
+#             if net.OPF_converged:
+#                 cost = float(net.res_cost) if not np.isnan(net.res_cost) else 0
+#                 hourly_cost_list.append(cost)
+#             else:
+#                 st.warning(f"OPF did not converge at hour {hour}")
+#                 hourly_cost_list.append(0)
+#         except Exception as e:
+#             st.warning(f"OPF failed at hour {hour}: {e}")
+#             hourly_cost_list.append(0)
+    
+#     return hourly_cost_list
 
 # Shared function: Create and display the map (used in Network Initialization)
 def create_map(df_line):
