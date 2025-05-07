@@ -5042,6 +5042,63 @@ elif selection == "Weather Aware System":
         slack_per_hour         = []
         shedding_buses         = []
 
+        # def overloaded_lines1(net):
+        #     overloaded = []
+        #     # turn loading_percent Series into a list once
+        #     loadings = transform_loading(net.res_line["loading_percent"])
+        #     real_check = all_real_numbers(net.res_line["loading_percent"].tolist())
+        
+        #     for idx, (res, loading_val) in enumerate(zip(net.res_line.itertuples(), loadings)):
+        #         # grab this line’s own max
+        #         own_max = net.line.at[idx, "max_loading_percent"]
+        #         # print(f"max loading capacity @ id {id} is {own_max}.")
+        
+        #         if not real_check:
+        #             # any NaN/non‑numeric or at‐limit is overloaded
+        #             if not isinstance(loading_val, (int, float)) or math.isnan(loading_val) or loading_val >= own_max:
+        #                 overloaded.append(idx)
+        #         else:
+        #             # only truly > its own max
+        #             if loading_val is not None and not (isinstance(loading_val, float) and math.isnan(loading_val)) and loading_val > own_max:
+        #                 overloaded.append(idx)
+        #     return overloaded
+        
+        # def overloaded_transformer(net, max_loading_capacity_transformer):
+        #     overloaded = []
+        #     if 'trafo' in net and net.trafo is not None:
+        #         for idx, res in net.res_trafo.iterrows():
+        #             val = transform_loading(res["loading_percent"])
+        #             if all_real_numbers(net.res_trafo['loading_percent'].tolist()) == False:
+        #                 if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity_transformer:
+        #                     overloaded.append(idx)
+        #             else:
+        #                 if val >= max_loading_capacity_transformer:
+        #                     overloaded.append(idx)
+        #     return overloaded
+        
+        # def overloaded_transformer1(net):
+        #     overloaded = []
+        #     if 'trafo' not in net and net.trafo is None:
+        #         return overloaded
+                
+        #     loadings = transform_loading(net.res_trafo["loading_percent"])
+        #     real_check = all_real_numbers(net.res_trafo["loading_percent"].tolist())
+        
+        #     for idx, (res, loading_val) in enumerate(zip(net.res_trafo.itertuples(), loadings)):
+        #         # grab this transformer’s own max
+        #         own_max = net.trafo.at[idx, "max_loading_percent"]
+        #         # print(f"max transformer capacity @ id {id} is {own_max}.")
+        
+        #         if not real_check:
+        #             if loading_val is not None and not (isinstance(loading_val, float) and math.isnan(loading_val)) and loading_val >= own_max:
+        #                 overloaded.append(idx)
+        #         else:
+        #             if loading_val > own_max:
+        #                 overloaded.append(idx)
+        #     return overloaded
+        
+
+
         # ------------------------------------------------------------------- #
         # 2.  hourly simulation
         # ------------------------------------------------------------------- #
@@ -5114,6 +5171,19 @@ elif selection == "Weather Aware System":
             # attempt OPF first ---------------------------------------------
             try:
                 pp.runopp(net)
+                # if (overloaded_lines1(net)==[] and and overloaded_transformer1(net)==[]):
+                #         wa_cost[hr] = net.res_cost
+                #         all_loads_zero_flag = 0
+                if net.OPF_converged:
+                    record_loadings()
+                    wa_cost[hr] = net.res_cost
+                    serving_per_hour.append(net.load.p_mw.tolist())
+                    gen_per_hour.append(net.res_gen.p_mw.tolist())
+                    slack_per_hour.append(float(net.res_ext_grid.at[0,"p_mw"]))
+                    continue
+                        
+                    
+            #     overloaded_transformer(net, max_trf_cap)==[]
             #     if net.OPF_converged:
             #         record_loadings()
             #         wa_cost[hr] = net.res_cost
@@ -5124,13 +5194,16 @@ elif selection == "Weather Aware System":
             except Exception:
                 pass  # fall‑through to load‑shedding loop
 
+           # if (all_real_numbers(transform_loading((net.res_line['loading_percent'])+(net.res_trafo['loading_percent']))) and overloaded_lines(net)==[] and overloaded_transformer(net)==[]):
+           #          wa_cost[hr] = net.res_cost
+           #  else:
             #  load‑shedding loop -------------------------------------------
-            while (overloaded_lines(net, max_line_cap) or
-                   overloaded_transformer(net, max_trf_cap)):
+            while (overloaded_lines(net) or
+                   overloaded_transformer(net)):
                 for crit in sorted(net.load.criticality.dropna().unique(), reverse=True):
                     for ld_idx in net.load[net.load.criticality==crit].index:
-                        if not overloaded_lines(net, max_line_cap) and \
-                           not overloaded_transformer(net, max_trf_cap):
+                        if not overloaded_lines(net) and \
+                           not overloaded_transformer(net):
                             break
                         val   = max_trf_cap if df_trafo is not None else max_line_cap
                         red_f = ((1/500)*val - .1)/2
