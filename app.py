@@ -2636,38 +2636,38 @@ elif selection == "Data Insights":
             slack_bau = st.session_state.bau_results["slack_per_hour_bau"]
             slack_wa = st.session_state.weather_aware_results["slack_per_hour_wa"]
 
-            fig_slack = go.Figure()
-            fig_slack.add_trace(go.Bar(
-                x=hours,
-                y=planned_slack,
-                name="Planned Slack Dispatch",
-                marker_color="rgba(99, 110, 250, 0.8)"
-            ))
-            fig_slack.add_trace(go.Bar(
-                x=hours,
-                y=slack_bau,
-                name="Projected Operations: Current OPF",
-                marker_color="rgba(239, 85, 59, 0.8)"
-            ))
-            fig_slack.add_trace(go.Bar(
-                x=hours,
-                y=slack_wa,
-                name="Projected Operations: Weather Risk Aware OPF",
-                marker_color="rgba(0, 204, 150, 0.8)"
-            ))
-            fig_slack.update_layout(
-                title="Hourly Slack Generator Dispatch Comparison",
-                xaxis_title="Time [in Hour]",
-                yaxis_title="Generation (MWh)",
-                barmode="group",
-                template="plotly_dark",
-                font=dict(family="Arial", size=14),
-                legend_title="Scenario",
-                height=600,
-                width=1200,
-                margin=dict(l=50, r=50, t=70, b=40)
-            )
-            st.plotly_chart(fig_slack, use_container_width=True)
+    fig_slack = go.Figure()
+    fig_slack.add_trace(go.Bar(
+        x=hours,
+        y=planned_slack,
+        name="Planned Slack Dispatch",
+        marker_color="rgba(99, 110, 250, 0.8)"
+    ))
+    fig_slack.add_trace(go.Bar(
+        x=hours,
+        y=slack_bau,
+        name="Projected Operations: Current OPF",
+        marker_color="rgba(239, 85, 59, 0.8)"
+    ))
+    fig_slack.add_trace(go.Bar(
+        x=hours,
+        y=slack_wa,
+        name="Projected Operations: Weather Risk Aware OPF",
+        marker_color="rgba(0, 204, 150, 0.8)"
+    ))
+    fig_slack.update_layout(
+        title="Hourly Slack Generator Dispatch Comparison",
+        xaxis_title="Time [in Hour]",
+        yaxis_title="Generation (MWh)",
+        barmode="group",
+        template="plotly_dark",
+        font=dict(family="Arial", size=14),
+        legend_title="Scenario",
+        height=600,
+        width=1200,
+        margin=dict(l=50, r=50, t=70, b=40)
+    )
+    st.plotly_chart(fig_slack, use_container_width=True)
 
     # ===================================================================== #
     # PLOT 6 ─ Hourly generator dispatch comparison at selected generator
