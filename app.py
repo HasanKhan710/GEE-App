@@ -2390,6 +2390,8 @@ elif selection == "Data Insights":
     line_legends     = [f"Line {r['from_bus']}-{r['to_bus']}" for _, r in df_line.iterrows()]
     palette          = px.colors.qualitative.Plotly
     colour_list      = palette * (loading_bau.shape[1] // len(palette) + 1)
+    gen_df = st.session_state.network_data["df_gen"]
+    gen_options = gen_df[gen_df["slack_weight"] != 1]["bus"].tolist()
 
     # --------------------------------------------------------------------- #
     # Persistent UI flags
@@ -2428,7 +2430,7 @@ elif selection == "Data Insights":
     # ------------------------------------------------------------------ #
     # New UI for additional plots
     # ------------------------------------------------------------------ #
-    st.subheader("Additional Plots")
+    st.subheader("Generator Plots")
 
     # Slack generator dispatch button
     if st.button("Hourly Slack Generator Dispatch Comparison"):
@@ -2440,7 +2442,6 @@ elif selection == "Data Insights":
     if st.button("Hourly Generator Dispatch at Selected Generator"):
         st.session_state.show_gen = True
         st.session_state.gen_to_plot = sel_gen
-
     # ===================================================================== #
     # PLOT 1 ─ Hourly load-shedding + grouped cost bars
     # ===================================================================== #
@@ -2672,23 +2673,21 @@ elif selection == "Data Insights":
     # PLOT 6 ─ Hourly generator dispatch comparison at selected generator
     # ===================================================================== #
     if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
-        gen_bus = st.session_state.gen_to_plot
-        df_load_profile = st.session_state.network_data["df_load_profile"]
-        gen_col = f"p_mw_PV{gen_bus}"
-        if gen_col not in df_load_profile.columns:
-            st.warning(f"Column {gen_col} not found in Generator Profile – cannot plot.")
+    gen_bus = st.session_state.gen_to_plot
+    df_load_profile = st.session_state.network_data["df_load_profile"]
+    gen_col = f"p_mw_PV{gen_bus}"
+    if gen_col not in df_load_profile.columns:
+        st.warning(f"Column {gen_col} not found in Generator Profile – cannot plot.")
+    else:
+        planned_gen = df_load_profile[gen_col].tolist()
+        # Find the index of the selected generator using gen_options
+        try:
+            gen_idx = gen_options.index(gen_bus)
+        except ValueError:
+            st.warning(f"Generator at bus {gen_bus} not found in generator list.")
         else:
-            planned_gen = df_load_profile[gen_col].tolist()
-            # Find the index of the selected generator (excluding slack)
-            gens = st.session_state.network_data["df_load_params"]["bus"].tolist()[1:]
-            try:
-                gen_idx = gens.index(gen_bus)
-            except ValueError:
-                st.warning(f"Generator at bus {gen_bus} not found in generator list.")
-            else:
-                served_bau = [hour[gen_idx] for hour in st.session_state.bau_results["gen_per_hour_bau"]]
-                served_wa = [hour[gen_idx] for hour in st.session_state.weather_aware_results["gen_per_hour_wa"]]
-
+            served_bau = [hour[gen_idx] for hour in st.session_state.bau_results["gen_per_hour_bau"]]
+            served_wa = [hour[gen_idx] for hour in st.session_state.weather_aware_results["gen_per_hour_wa"]]
                 fig_gen = go.Figure()
                 fig_gen.add_trace(go.Bar(
                     x=hours,
