@@ -2021,12 +2021,12 @@ elif selection == "Projected Operation Under Current OPF":
 #         st.dataframe(cost_tbl, use_container_width=True)
 
 # ────────────────────────────────────────────────────────────────────────────
-# Page 4: Weather‑Aware System
+# Page 4 :  Weather‑Aware System
 # ────────────────────────────────────────────────────────────────────────────
 elif selection == "Projected Operation Under Weather Risk Aware OPF":
     st.title("Projected Operation Under Weather Risk Aware OPF")
 
-    # --- Sanity Checks ------------------------------------------------------
+    # --- sanity checks ------------------------------------------------------
     req_keys = ["network_data", "line_outage_data", "bau_results"]
     if any(k not in st.session_state or st.session_state[k] is None for k in req_keys):
         st.warning(
@@ -2045,15 +2045,15 @@ elif selection == "Projected Operation Under Weather Risk Aware OPF":
     df_trafo          = net_data.get("df_trafo")
     num_hours         = len(df_load_profile)
 
-    # Contingency Selection --------------------------------------------------
+    # contingency selection – same logic as BAU -----------------------------
     cont_mode = st.selectbox(
         "Select Contingency Mode",
         ["Maximum Contingency Mode (Includes all Expected Line Outages)", "Capped Contingency Mode (Limits outages to 20% of network lines)"],
-        help="Capped: ≤ 20 % of lines; Maximum: all forecast outages."
+        help="Capped: ≤ 20 % of lines;  Maximum: all forecast outages."
     )
     capped = cont_mode == "(Limits outages to 20% of network lines)"
 
-    # Build Outages ----------------------------------------------------------
+    # build outages with the helper you already have
     line_out_data  = st.session_state.line_outage_data
     line_outages   = generate_line_outages(
         line_out_data["hours"],
@@ -2063,215 +2063,290 @@ elif selection == "Projected Operation Under Weather Risk Aware OPF":
         df_line=df_line,
     )
 
-    # Run Button -------------------------------------------------------------
+    # run button -------------------------------------------------------------
     if st.button("Run Weather‑Aware Analysis"):
-        # 1. Rebuild the Network ---------------------------------------------
+        # -------------------------------------------------------------------- #
+        # 1.  rebuild the pandapower network so we start from a fresh copy
+        # -------------------------------------------------------------------- #
         net, load_dyn, gen_dyn = initialize_network(
             df_bus, df_load, df_gen,
             df_line, df_trafo,
             df_load_profile, df_gen_profile,
         )
 
-        # Maps for Quick Lookup ----------------------------------------------
+        # maps for quick look‑up (already computed once – reuse)
         line_idx_map  = st.session_state.get("line_idx_map", {})
-        trafo_idx_map = st.session_state.get("trafo_idx_map", {})
+        trafo_idx_map = st.session_state.get("trafo_idx_map", {})   # ← add this
 
-        # Loading Capacities -------------------------------------------------
+        # figure out how many plain lines the network has
+        no_of_lines = len(df_line) - (len(df_trafo) if df_trafo is not None else 0)
+
+        
         max_line_cap = st.session_state.get("max_loading_capacity", 100.0)
         max_trf_cap  = st.session_state.get("max_loading_capacity_transformer", max_line_cap)
+        
+        # storage  -----------------------------------------------------------
+        business_as_usuall_cost = st.session_state.bau_results["business_as_usual_cost"]
+        weather_aware_cost = [0] * num_hours  # Initialize like in Colab
+        
+        cumulative_shed = {b: {"p_mw":0., "q_mvar":0.}
+                          for b in net.load.bus.unique()}
+        hourly_shed_weather_aware = [0.] * num_hours
+        loading_percent_wa = []
+        served_load_per_hour_wa = []
+        gen_per_hour_wa = []
+        slack_per_hour_wa = []
+        planned_slack_per_hour = []
+        shedding_buses = []
+        seen_buses = set()
 
-        # Storage Initialization ---------------------------------------------
-        # Fix 5: Initialize cost array as in Colab instead of undefined function
-        wa_cost                = [0] * num_hours  # Replaced calculate_hourly_cost
-        cumulative_shed        = {b: {"p_mw": 0., "q_mvar": 0.} for b in net.load.bus.unique()}
-        hourly_shed            = [0.] * num_hours
-        loading_percent_wa     = []
-        serving_per_hour       = []
-        gen_per_hour           = []
-        slack_per_hour         = []
-        shedding_buses         = []
-
-        # 2. Hourly Simulation -----------------------------------------------
-        for hr in range(num_hours):
-            # Reset Branches -------------------------------------------------
+        # ------------------------------------------------------------------- #
+        # 2.  hourly simulation
+        # ------------------------------------------------------------------- #
+        for hour in range(num_hours):
+            # reset all branches each hour (they'll be taken out again below)
             net.line["in_service"] = True
             if df_trafo is not None:
                 net.trafo["in_service"] = True
 
-            # Apply Outages --------------------------------------------------
+            # take forecasted lines/trafos out of service
             for fbus, tbus, start_hr in line_outages:
-                if hr < start_hr:
+                if hour < start_hr:
                     continue
-                is_tf = check_bus_pair(df_line, df_trafo, (fbus, tbus))
-                if is_tf:
+                is_trafo = check_bus_pair(df_line, df_trafo, (fbus, tbus))
+                if is_trafo:
                     mask = (
                         ((net.trafo.hv_bus == fbus) & (net.trafo.lv_bus == tbus)) |
                         ((net.trafo.hv_bus == tbus) & (net.trafo.lv_bus == fbus))
                     )
-                    net.trafo.loc[mask, "in_service"] = False
+                    if not mask.any():
+                        st.warning(f"Warning: transformer {fbus}-{tbus} not found.")
+                    else:
+                        for tf_idx in net.trafo[mask].index:
+                            net.trafo.at[tf_idx, "in_service"] = False
                 else:
                     idx = line_idx_map.get((fbus, tbus))
-                    if idx is not None:
+                    if idx is None:
+                        st.warning(f"Warning: line {fbus}-{tbus} not found in network.")
+                    else:
                         net.line.at[idx, "in_service"] = False
 
-            # Update Load & Generation Profiles ------------------------------
+            # update load & gen profiles for this hour -----------------------
+            planned_gen_output = {}
             for idx in net.load.index:
                 bus = net.load.at[idx, "bus"]
                 if bus in load_dyn:
-                    net.load.at[idx, "p_mw"]   = df_load_profile.at[hr, load_dyn[bus]["p"]]
-                    net.load.at[idx, "q_mvar"] = df_load_profile.at[hr, load_dyn[bus]["q"]]
+                    net.load.at[idx, "p_mw"] = df_load_profile.at[hour, load_dyn[bus]["p"]]
+                    net.load.at[idx, "q_mvar"] = df_load_profile.at[hour, load_dyn[bus]["q"]]
+            
             for idx in net.gen.index:
                 bus = net.gen.at[idx, "bus"]
                 if bus in gen_dyn:
-                    net.gen.at[idx, "p_mw"] = df_gen_profile.at[hr, gen_dyn[bus]]
+                    p = df_gen_profile.at[hour, gen_dyn[bus]]
+                    net.gen.at[idx, "p_mw"] = p
+                    planned_gen_output[idx] = p
 
-            # Run Initial Power Flow -----------------------------------------
+            # run PF first ---------------------------------------------------
             try:
                 pp.runpp(net)
-            except Exception:
+            except Exception as e:
+                st.warning(f"Initial Power Flow failed for hour {hour}: {e}")
+                # network unsolvable even before optimisation
                 loading_percent_wa.append([None] * (len(net.line) + (len(net.trafo) if df_trafo is not None else 0)))
-                serving_per_hour.append([None] * len(net.load))
-                gen_per_hour.append([None] * len(net.res_gen))
-                slack_per_hour.append(None)
+                served_load_per_hour_wa.append([None] * len(net.load))
+                gen_per_hour_wa.append([None] * len(net.res_gen))
+                slack_per_hour_wa.append(None)
+                planned_slack_per_hour.append(None)
                 continue
 
-            # Helper Function to Record Loadings -----------------------------
-            def record_loadings():
-                vals = transform_loading(net.res_line.loading_percent)
-                if df_trafo is not None:
-                    vals.extend(transform_loading(net.res_trafo.loading_percent))
-                loading_percent_wa.append(vals)
-
-            # Check for Overloads --------------------------------------------
-            # Fix 1: Include transformer loadings in real-number check
-            loadings = transform_loading(net.res_line.loading_percent)
+            # Record initial loading percent
+            intermediate_var = transform_loading(net.res_line["loading_percent"])
             if df_trafo is not None:
-                loadings.extend(transform_loading(net.res_trafo.loading_percent))
-            if (overloaded_lines(net, max_line_cap) == [] and
-                overloaded_transformer(net, max_trf_cap) == [] and
-                all_real_numbers(loadings)):
-                record_loadings()
-                serving_per_hour.append(net.load.p_mw.tolist())
-                gen_per_hour.append(net.res_gen.p_mw.tolist())
-                slack_per_hour.append(float(net.res_ext_grid.at[0, "p_mw"]))
+                intermediate_var.extend(transform_loading(net.res_trafo['loading_percent']))
+
+            # Record planned slack output before any changes
+            planned_slack = {}
+            if not net.ext_grid.empty:
+                for idx in net.ext_grid.index:
+                    pw = "p_mw" if "p_mw" in net.res_ext_grid else "p_kw"
+                    planned_slack[idx] = net.res_ext_grid.at[idx, pw]
+                    planned_slack_per_hour.append(float(net.res_ext_grid.at[0, "p_mw"]))
+
+            # Check for overloads
+            overloads = overloaded_lines(net, max_line_cap)
+            overloads_trafo = []
+            if df_trafo is not None:
+                overloads_trafo = overloaded_transformer(net, max_trf_cap)
+            all_loads_zero_flag = False
+
+            # If no overloads, continue with current state
+            if (len(overloads) == 0 and 
+                len(overloads_trafo) == 0 and 
+                all_real_numbers(intermediate_var)):
+                
+                loading_percent_wa.append(intermediate_var)
+                slack_per_hour_wa.append(float(net.res_ext_grid.at[0, "p_mw"]))
+                
+                if net.load["p_mw"].isnull().any():
+                    served_load_per_hour_wa.append([None] * len(net.load))
+                else:
+                    hourly_loads = net.load["p_mw"].tolist()
+                    served_load_per_hour_wa.append(hourly_loads)
+                
+                if net.res_gen["p_mw"].isnull().any():
+                    gen_per_hour_wa.append([None] * len(net.res_gen))
+                else:
+                    hourly_gen = net.res_gen["p_mw"].tolist()
+                    gen_per_hour_wa.append(hourly_gen)
+                
                 continue
 
-            # Attempt OPF ----------------------------------------------------
-            # Fix 2: Only proceed if OPF converges AND no overloads remain
+            # Try OPF first to resolve overloads
             try:
                 pp.runopp(net)
-                if (net.OPF_converged and
-                    overloaded_lines(net, max_line_cap) == [] and
+                if (overloaded_lines(net, max_line_cap) == [] and 
                     overloaded_transformer(net, max_trf_cap) == []):
-                    record_loadings()
-                    wa_cost[hr] = net.res_cost
-                    serving_per_hour.append(net.load.p_mw.tolist())
-                    gen_per_hour.append(net.res_gen.p_mw.tolist())
-                    slack_per_hour.append(float(net.res_ext_grid.at[0, "p_mw"]))
-                    continue
-            except Exception:
-                pass  # Fall through to load shedding
+                    weather_aware_cost[hour] = net.res_cost
+                    all_loads_zero_flag = True
+            except Exception as e:
+                pass
 
-            # Load Shedding Loop ---------------------------------------------
-            # Fix 3: Add flag to mimic Colab’s early exit logic
-            all_loads_zero_flag = False
-            while (overloaded_lines(net, max_line_cap) or
-                   overloaded_transformer(net, max_trf_cap)) and not all_loads_zero_flag:
-                for crit in sorted(net.load.criticality.dropna().unique(), reverse=True):
-                    for ld_idx in net.load[net.load.criticality == crit].index:
-                        if (not overloaded_lines(net, max_line_cap) and
-                            not overloaded_transformer(net, max_trf_cap)):
-                            break
-                        val   = max_trf_cap if df_trafo is not None else max_line_cap
-                        red_f = ((1/500) * val - 0.1) / 2
-                        dp    = red_f * net.load.at[ld_idx, "p_mw"]
-                        dq    = red_f * net.load.at[ld_idx, "q_mvar"]
-                        bus   = int(net.load.at[ld_idx, "bus"])
-                        net.load.at[ld_idx, "p_mw"] -= dp
-                        net.load.at[ld_idx, "q_mvar"] -= dq
-                        cumulative_shed[bus]["p_mw"] += dp
-                        cumulative_shed[bus]["q_mvar"] += dq
-                        hourly_shed[hr] += dp
-                        shedding_buses.append((hr, bus))
-
-                        if dp < 0.01:  # Mimic Colab’s collapse condition
-                            all_loads_zero_flag = True
-                            wa_cost[hr] = 0
-                            hourly_shed[hr] += sum(net.load["p_mw"])
-                            net.load["p_mw"] = 0
-                            net.load["q_mvar"] = 0
-                            break
-
-                        # Try OPF After Shedding ---------------------------------
-                        try:
-                            pp.runopp(net)
-                            if net.OPF_converged:
-                                pf_loadings = transform_loading(net.res_line.loading_percent)
-                                if df_trafo is not None:
-                                    pf_loadings.extend(transform_loading(net.res_trafo.loading_percent))
-                                if all_real_numbers(pf_loadings):
-                                    all_loads_zero_flag = True
-                                    # Fix 4: Set cost only if OPF converges
-                                    wa_cost[hr] = net.res_cost
-                                    break
-                        except Exception:
-                            pp.runpp(net)
-
-            # Record Final State ---------------------------------------------
-            record_loadings()
-            # Fix 4: Final cost set only if OPF converged (post-loop check)
-            if net.OPF_converged:
-                wa_cost[hr] = net.res_cost
+            # Check if OPF resolved overloads with realistic loadings
+            if (all_real_numbers(transform_loading(net.res_line['loading_percent'])) and
+                all_real_numbers(transform_loading(net.res_trafo['loading_percent'] if df_trafo is not None else [])) and
+                overloaded_lines(net, max_line_cap) == [] and 
+                overloaded_transformer(net, max_trf_cap) == []):
+                weather_aware_cost[hour] = net.res_cost
             else:
-                wa_cost[hr] = 0
+                # Start load shedding process if OPF didn't resolve overloads
+                while ((overloaded_lines(net, max_line_cap) != [] or 
+                       overloaded_transformer(net, max_trf_cap) != []) and 
+                       all_loads_zero_flag == False):
+                    
+                    for crit in sorted(net.load['criticality'].dropna().unique(), reverse=True):
+                        for ld_idx in net.load[net.load['criticality'] == crit].index:
+                            if (overloaded_lines(net, max_line_cap) == [] and 
+                                overloaded_transformer(net, max_trf_cap) == []):
+                                break
+                                
+                            bus = net.load.at[ld_idx, 'bus']
+                            value = max_trf_cap if df_trafo is not None else max_line_cap
+                            factor = ((1/500) * value - 0.1) / 2
+                            dp = factor * net.load.at[ld_idx, 'p_mw']
+                            hourly_shed_weather_aware[hour] += dp
+                            dq = factor * net.load.at[ld_idx, 'q_mvar']
+                            
+                            net.load.at[ld_idx, 'p_mw'] -= dp
+                            net.load.at[ld_idx, 'q_mvar'] -= dq
+                            
+                            # Record shedding event
+                            shedding_buses.append((hour, int(bus)))
+                            cumulative_shed[bus]["p_mw"] += dp
+                            cumulative_shed[bus]["q_mvar"] += dq
+                            
+                            # Check if load is too small to further shed
+                            if dp < 0.01:
+                                all_loads_zero_flag = True
+                                weather_aware_cost[hour] = 0
+                                # Add remaining load as shed and set all loads to zero
+                                hourly_shed_weather_aware[hour] += sum(net.load['p_mw'])
+                                for i in net.load.index:
+                                    net.load.at[i, 'p_mw'] = 0
+                                    net.load.at[i, 'q_mvar'] = 0
+                                break
+                                
+                            try:
+                                pp.runopp(net)
+                                if net.OPF_converged:
+                                    loadings = transform_loading(net.res_line["loading_percent"])
+                                    if df_trafo is not None:
+                                        loadings.extend(transform_loading(net.res_trafo["loading_percent"]))
+                                    if all_real_numbers(loadings):
+                                        weather_aware_cost[hour] = net.res_cost
+                                        if (overloaded_lines(net, max_line_cap) == [] and 
+                                            overloaded_transformer(net, max_trf_cap) == []):
+                                            break
+                            except Exception:
+                                try:
+                                    pp.runpp(net)
+                                except Exception:
+                                    all_loads_zero_flag = True
+                                    break
 
-            serving_per_hour.append(net.load.p_mw.tolist())
-            gen_per_hour.append(net.res_gen.p_mw.tolist())
-            slack_per_hour.append(float(net.res_ext_grid.at[0, "p_mw"]))
+            # Final OPF run after all adjustments for this hour
+            if net.OPF_converged:
+                try:
+                    pp.runopp(net)
+                    weather_aware_cost[hour] = net.res_cost
+                except Exception:
+                    pass
 
-        # 3. Store Results in Session State ----------------------------------
+            # Record final state for this hour
+            intermediate_var = transform_loading(net.res_line["loading_percent"])
+            if df_trafo is not None:
+                intermediate_var.extend(transform_loading(net.res_trafo['loading_percent']))
+            loading_percent_wa.append(intermediate_var)
+
+            if net.load["p_mw"].isnull().any():
+                served_load_per_hour_wa.append([None] * len(net.load))
+            else:
+                hourly_loads = net.load["p_mw"].tolist()
+                served_load_per_hour_wa.append(hourly_loads)
+
+            if net.res_gen["p_mw"].isnull().any():
+                gen_per_hour_wa.append([None] * len(net.res_gen))
+            else:
+                hourly_gen = net.res_gen["p_mw"].tolist()
+                gen_per_hour_wa.append(hourly_gen)
+                
+            slack_per_hour_wa.append(float(net.res_ext_grid.at[0, "p_mw"]))
+
+        # ------------------------------------------------------------------ #
+        # 3.   store results in session‑state
+        # ------------------------------------------------------------------ #
         st.session_state.weather_aware_results = dict(
-            cost               = wa_cost,
+            cost               = weather_aware_cost,
             cumulative_shed    = cumulative_shed,
-            hourly_shed        = hourly_shed,
+            hourly_shed        = hourly_shed_weather_aware,
             loading_percent    = loading_percent_wa,
-            served_load        = serving_per_hour,
-            gen_per_hour       = gen_per_hour,
-            slack_per_hour     = slack_per_hour,
+            served_load        = served_load_per_hour_wa,
+            gen_per_hour       = gen_per_hour_wa,
+            slack_per_hour     = slack_per_hour_wa,
             shedding_buses     = shedding_buses,
         )
         st.success("Weather‑Aware simulation finished.")
 
-    # 4. Show Summary Tables -----------------------------------------------
+    # ---------------------------------------------------------------------- #
+    # 4.  show summary tables if we have results
+    # ---------------------------------------------------------------------- #
     if "weather_aware_results" in st.session_state:
         wa_res   = st.session_state.weather_aware_results
         bau_cost = st.session_state.bau_results["business_as_usual_cost"]
 
         st.subheader("Day‑End Summary (Weather‑Aware)")
 
-        # Load Shedding Per Bus ------------------------------------------
+        # load‑shedding per bus --------------------------------------------
         shed_tbl = []
         for bus, shed in wa_res["cumulative_shed"].items():
-            total_d = st.session_state.bau_results["total_demand_per_bus"].get(bus, {"p_mw": 0, "q_mvar": 0})
+            total_d = st.session_state.bau_results["total_demand_per_bus"].get(bus, {"p_mw":0,"q_mvar":0})
             shed_tbl.append(dict(
                 Bus                 = bus,
-                **{"Load Shed (MWh)": round(shed["p_mw"], 2),
-                   "Load Shed (MVARh)": round(shed["q_mvar"], 2),
-                   "Total Demand (MWh)": round(total_d["p_mw"], 2),
-                   "Total Demand (MVARh)": round(total_d["q_mvar"], 2)}
+                **{ "Load Shed (MWh)": round(shed["p_mw"],2),
+                   "Load Shed (MVARh)": round(shed["q_mvar"],2),
+                   "Total Demand (MWh)": round(total_d["p_mw"],2),
+                   "Total Demand (MVARh)": round(total_d["q_mvar"],2)}
             ))
         st.dataframe(pd.DataFrame(shed_tbl), use_container_width=True)
 
-        # Hourly Generation Cost -----------------------------------------
+        # hourly gen cost ---------------------------------------------------
         cost_tbl = pd.DataFrame({
             "Hour"                      : list(range(num_hours)),
-            "Weather‑Aware Cost (PKR)"  : [round(c, 2) for c in wa_res["cost"]],
-            "BAU Cost (PKR)"            : [round(c, 2) for c in bau_cost],
-            "Δ Cost (WA – BAU)"         : [round(w - b, 2) for w, b in zip(wa_res["cost"], bau_cost)],
+            "Weather‑Aware Cost (PKR)"  : [round(c,2) for c in wa_res["cost"]],
+            "BAU Cost (PKR)"            : [round(c,2) for c in bau_cost],
+            "Δ Cost (WA – BAU)"         : [round(w-b,2) for w,b in zip(wa_res["cost"], bau_cost)],
         })
         st.write("### Hourly Generation Cost Comparison")
-        st.dataframe(cost_tbl, use_container_width=True)
-        
+        st.dataframe(cost_tbl, use_container_width=True)        
         # ------------------------------------------------------------------ #
         # 5.  interactive map – structure parallels BAU visualiser
         # ------------------------------------------------------------------ #
