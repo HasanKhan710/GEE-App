@@ -5077,10 +5077,11 @@ elif selection == "Weather Aware System":
                 bus = net.gen.at[idx, "bus"]
                 if bus in gen_dyn:
                     net.gen.at[idx, "p_mw"] = df_gen_profile.at[hr, gen_dyn[bus]]
-           criticality_map = dict(zip(df_load["bus"], df_load["criticality"]))
-           net.load["bus"] = net.load["bus"].astype(int)
-           net.load["criticality"] = net.load["bus"].map(criticality_map)
-                            
+                        
+            # Update criticality
+            criticality_map = dict(zip(df_load["bus"], df_load["criticality"]))
+            net.load["bus"] = net.load["bus"].astype(int)
+            net.load["criticality"] = net.load["bus"].map(criticality_map                        
 
             # run PF first ---------------------------------------------------
             try:
