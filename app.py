@@ -5925,27 +5925,7 @@ elif selection == "Data Analytics":
 
     st.markdown("---")
 
-    # # ── PLOT 5: Generator Dispatch @ Selected Generator ────────────────────
-    # gen = st.selectbox("Select Generator Bus", valid_gens, key="gen_to_plot")
-    # if st.button("5) Show Generator Dispatch Comparison"):
-    #     st.session_state.show_gen = True
-    # if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
-    #     b = st.session_state.gen_to_plot
-    #     col = f"p_mw_PV{b}"
-    #     orig = df_gp[col].tolist()
-    #     idx  = df_gen.reset_index().index[df_gen["bus"]==b][0]
-    #     bau  = [h[idx] for h in st.session_state.bau_results["gen_per_hour_bau"]]
-    #     wa   = [h[idx] for h in st.session_state.weather_aware_results["gen_per_hour"]]
-    #     fig5 = go.Figure()
-    #     fig5.add_bar(x=hours, y=orig, name="Planned")
-    #     fig5.add_bar(x=hours, y=bau,  name="BAU")
-    #     fig5.add_bar(x=hours, y=wa,   name="WA")
-    #     fig5.update_layout(barmode="group", title=f"Dispatch @ Gen {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
-    #     st.plotly_chart(fig5, use_container_width=True)
-
-    # st.markdown("---")
-
-    # ── PLOT 6: Load‑Served @ Selected Load Bus ─────────────────────────────
+# ── PLOT 6: Load‑Served @ Selected Load Bus ─────────────────────────────
     lb = st.selectbox("Select Load Bus", valid_loads, key="bus_to_plot")
     if st.button("6) Show Load‑Served Comparison"):
         st.session_state.show_bus = True
@@ -5967,6 +5947,28 @@ elif selection == "Data Analytics":
         else:
             st.warning(f"No profile data for bus {b}.")
 
+
+    # # ── PLOT 5: Generator Dispatch @ Selected Generator ────────────────────
+    # gen = st.selectbox("Select Generator Bus", valid_gens, key="gen_to_plot")
+    # if st.button("5) Show Generator Dispatch Comparison"):
+    #     st.session_state.show_gen = True
+    # if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
+    #     b = st.session_state.gen_to_plot
+    #     col = f"p_mw_PV{b}"
+    #     orig = df_gp[col].tolist()
+    #     idx  = df_gen.reset_index().index[df_gen["bus"]==b][0]
+    #     bau  = [h[idx] for h in st.session_state.bau_results["gen_per_hour_bau"]]
+    #     wa   = [h[idx] for h in st.session_state.weather_aware_results["gen_per_hour"]]
+    #     fig5 = go.Figure()
+    #     fig5.add_bar(x=hours, y=orig, name="Planned")
+    #     fig5.add_bar(x=hours, y=bau,  name="BAU")
+    #     fig5.add_bar(x=hours, y=wa,   name="WA")
+    #     fig5.update_layout(barmode="group", title=f"Dispatch @ Gen {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
+    #     st.plotly_chart(fig5, use_container_width=True)
+
+    # st.markdown("---")
+
+    
 
 # ────────────────────────────────────────────────────────────────────────────
 # Page 0 :  About the App
