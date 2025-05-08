@@ -5841,7 +5841,7 @@ elif selection == "Data Analytics":
             st.session_state[key] = False
                 
     if "bus_to_plot" not in st.session_state:
-    st.session_state.bus_to_plot = None
+            st.session_state.bus_to_plot = None
 
     st.markdown("---")
 
