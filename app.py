@@ -5848,22 +5848,22 @@ elif selection == "Data Analytics":
     if st.session_state.show_comp:
         # load‑shedding lines
         fig1 = go.Figure()
-        fig1.add_trace(go.Scatter(x=hours, y=shed_bau, mode="lines+markers", name="BAU Shed"))
-        fig1.add_trace(go.Scatter(x=hours, y=shed_wa,  mode="lines+markers", name="WA Shed"))
+        fig1.add_trace(go.Scatter(x=hours, y=shed_bau, mode="lines+markers", name="Projected Operation: Current OPF Load Shedding"))
+        fig1.add_trace(go.Scatter(x=hours, y=shed_wa,  mode="lines+markers", name="Projected Operation: Weather Risk Aware OPF Load Shedding"))
         fig1.update_layout(title="Load‑Shedding Comparison", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
         st.plotly_chart(fig1, use_container_width=True)
 
         # cost bars
         fig1b = go.Figure()
-        fig1b.add_bar(x=hours, y=cost_bau_M, name="BAU Cost")
-        fig1b.add_bar(x=hours, y=cost_wa_M,  name="WA Cost")
+        fig1b.add_bar(x=hours, y=cost_bau_M, name="Projected Operation: Current OPF Load Shedding")
+        fig1b.add_bar(x=hours, y=cost_wa_M,  name="Projected Operation: Weather Risk Aware OPF Load Shedding")
         fig1b.update_layout(barmode="group", title="Generation Cost Comparison", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
         st.plotly_chart(fig1b, use_container_width=True)
 
     st.markdown("---")
 
     # ── PLOT 2: Cost‑Difference & Lost Savings ───────────────────────────────
-    if st.button("2) Cost Difference & Lost Savings (BAU vs WA)"):
+    if st.button("2) Potential Lost in Revenue: Difference in Generation Cost"):
         st.session_state.show_diff = True
     if st.session_state.show_diff:
         # cost‑difference filled
@@ -5874,8 +5874,8 @@ elif selection == "Data Analytics":
             fill="toself", fillcolor="rgba(255,140,0,0.3)",
             line=dict(color="rgba(0,0,0,0)"),
             name="Cost Difference"))
-        fig2.add_trace(go.Scatter(x=hours, y=cost_bau_M, name="BAU Cost"))
-        fig2.add_trace(go.Scatter(x=hours, y=cost_wa_M,  name="WA Cost"))
+        fig2.add_trace(go.Scatter(x=hours, y=cost_bau_M, name="Projected Operations: Current OPF Cost"))
+        fig2.add_trace(go.Scatter(x=hours, y=cost_wa_M,  name="Projected Operations: Weather Risk Aware Cost"))
         fig2.update_layout(title="Hourly Cost Difference", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
         st.plotly_chart(fig2, use_container_width=True)
 
@@ -5885,8 +5885,8 @@ elif selection == "Data Analytics":
         fig2b.add_trace(go.Scatter(
             x=hours, y=lost, fill="tozeroy",
             fillcolor="rgba(255,99,71,0.6)", mode="none",
-            name="Lost Savings"))
-        fig2b.update_layout(title="Lost Savings (WA > BAU)", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
+            name="Potential Loss of Revenue"))
+        fig2b.update_layout(title="Potential Loss of Revenue", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
         st.plotly_chart(fig2b, use_container_width=True)
 
     st.markdown("---")
@@ -5900,13 +5900,13 @@ elif selection == "Data Analytics":
         fig3 = go.Figure()
         for i in range(lb_bau.shape[1]):
             fig3.add_trace(go.Scatter(x=x, y=lb_bau[:,i], name=legends[i], line=dict(color=colours[i])))
-        fig3.update_layout(title="BAU Line Loading", xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
+        fig3.update_layout(title='Projected future operations - Current OPF Line Loading Over Time', xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
         st.plotly_chart(fig3, use_container_width=True)
         # WA
         fig3b = go.Figure()
         for i in range(lb_wa.shape[1]):
             fig3b.add_trace(go.Scatter(x=x, y=lb_wa[:,i], name=legends[i], line=dict(dash="dash", color=colours[i])))
-        fig3b.update_layout(title="WA Line Loading", xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
+        fig3b.update_layout(title='Projected future operations - Weather Risk Aware OPF Line Loading Over Time', xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
         st.plotly_chart(fig3b, use_container_width=True)
 
     st.markdown("---")
@@ -5918,8 +5918,8 @@ elif selection == "Data Analytics":
         sl_bau = st.session_state.bau_results["slack_per_hour_bau"]
         sl_wa  = st.session_state.weather_aware_results["slack_per_hour"]
         fig4 = go.Figure()
-        fig4.add_bar(x=list(range(24)), y=sl_bau, name="BAU Slack")
-        fig4.add_bar(x=list(range(24)), y=sl_wa,  name="WA Slack")
+        fig4.add_bar(x=list(range(24)), y=sl_bau, name="Projected future operations - Current OPF Slack")
+        fig4.add_bar(x=list(range(24)), y=sl_wa,  name="Projected future operations - Weather Risk Aware OPF Slack")
         fig4.update_layout(barmode="group", title="Slack Generator Dispatch", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
         st.plotly_chart(fig4, use_container_width=True)
 
@@ -5960,8 +5960,8 @@ elif selection == "Data Analytics":
             wa  = [h[idx] for h in st.session_state.weather_aware_results["served_load"]]
             fig6 = go.Figure()
             fig6.add_bar(x=hours, y=dem, name="Demand")
-            fig6.add_bar(x=hours, y=bau, name="BAU Served")
-            fig6.add_bar(x=hours, y=wa,  name="WA Served")
+            fig6.add_bar(x=hours, y=bau, name="Projected future operations - Current OPF Served")
+            fig6.add_bar(x=hours, y=wa,  name="Projected future operations - Weather Risk Aware OPF Served")
             fig6.update_layout(barmode="group", title=f"Load‑Served @ Bus {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
             st.plotly_chart(fig6, use_container_width=True)
         else:
