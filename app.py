@@ -5511,9 +5511,66 @@ elif selection == "Data Analytics":
         # generator selection dropdown
         gen_options = st.session_state.network_data["df_gen"]["bus"].astype(int).tolist()
         sel_gen = st.selectbox("Select a Generator for detailed dispatch comparison:", gen_options, key="gen_select")
+        # ── Add button to show the generator‑dispatch plot ──────────────────────
         if st.button("Generator Dispatch at Selected Generator"):
             st.session_state.show_gen = True
-            st.session_state.gen_to_plot = sel_gen
+        
+        if st.session_state.show_gen:
+            df_gen_params  = st.session_state.network_data["df_gen"]
+            df_gen_profile = st.session_state.network_data["df_gen_profile"]
+        
+            # only those buses for which we have a p_mw_PV{bus} column
+            gens = [
+                int(b) for b in df_gen_params["bus"].tolist()[1:]
+                if f"p_mw_PV{b}" in df_gen_profile.columns
+            ]
+            if not gens:
+                st.warning("No generators with profile data found.")
+                st.stop()
+        
+            bus = st.selectbox("Select generator bus:", gens)
+        
+            # build the profile column name
+            col = f"p_mw_PV{bus}"
+            original = df_gen_profile[col].tolist()
+        
+            # now find the same generator’s index in the per‑generator result lists
+            try:
+                # look up index in the generator‑parameters table
+                bus_idx = df_gen_params.reset_index().index[df_gen_params["bus"] == bus][0]
+            except IndexError:
+                st.warning(f"Generator at bus {bus} not found in parameters.")
+                st.stop()
+        
+            # extract BAU & WA dispatch for that generator
+            bau_list = st.session_state.bau_results["gen_per_hour_bau"]
+            wa_list  = st.session_state.weather_aware_results["gen_per_hour"]
+        
+            # sanity check
+            if bus_idx >= len(bau_list[0]) or bus_idx >= len(wa_list[0]):
+                st.error("Internal mapping error: generator index out of range.")
+                st.stop()
+        
+            served_bau = [hr[bus_idx] for hr in bau_list]
+            served_wa  = [hr[bus_idx] for hr in wa_list]
+            hours      = list(range(len(original)))
+        
+            # plot
+            fig2 = go.Figure()
+            fig2.add_trace(go.Bar(x=hours, y=original,   name="Planned Dispatch"))
+            fig2.add_trace(go.Bar(x=hours, y=served_bau, name="Current OPF"))
+            fig2.add_trace(go.Bar(x=hours, y=served_wa,  name="Weather‑Aware OPF"))
+            fig2.update_layout(
+                title=f"Generator Dispatch Comparison @ Bus {bus}",
+                xaxis_title="Hour",
+                yaxis_title="Generation (MWh)",
+                barmode="group",
+                template="plotly_dark",
+                height=600, width=1000,
+                margin=dict(l=40, r=40, t=60, b=40)
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+        
     # ------------------------------------------------------------------ #
     #  extra UI for “Plot 4”  –  pick a load‑bus & make the button
     # ------------------------------------------------------------------ #
@@ -5729,40 +5786,40 @@ elif selection == "Data Analytics":
         st.plotly_chart(fig, use_container_width=True)
 
     # PLOT Generator Dispatch at Selected Generator
-    if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
-        bus = st.session_state.gen_to_plot
-        # read profile
-        df_gen_profile = st.session_state.network_data['df_gen_profile']
-        col_name = f"p_mw_PV{bus}"
-        if col_name not in df_gen_profile.columns:
-            st.warning(f"Column {col_name} not found in Generator Profile.")
-        else:
-            hours = list(range(24))
-            planned = df_gen_profile[col_name].tolist()
-            # find index of this generator in df_gen
-            dfg = st.session_state.network_data['df_gen']
-            try:
-                idx = dfg.reset_index().index[dfg['bus'] == bus][0]
-            except IndexError:
-                st.warning(f"Generator {bus} not found in parameters.")
-                idx = None
-            if idx is not None:
-                bau_gen = [hr[idx] for hr in st.session_state.bau_results['gen_per_hour_bau']]
-                wa_gen  = [hr[idx] for hr in st.session_state.weather_aware_results['gen_per_hour']]
+    # if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
+    #     bus = st.session_state.gen_to_plot
+    #     # read profile
+    #     df_gen_profile = st.session_state.network_data['df_gen_profile']
+    #     col_name = f"p_mw_PV{bus}"
+    #     if col_name not in df_gen_profile.columns:
+    #         st.warning(f"Column {col_name} not found in Generator Profile.")
+    #     else:
+    #         hours = list(range(24))
+    #         planned = df_gen_profile[col_name].tolist()
+    #         # find index of this generator in df_gen
+    #         dfg = st.session_state.network_data['df_gen']
+    #         try:
+    #             idx = dfg.reset_index().index[dfg['bus'] == bus][0]
+    #         except IndexError:
+    #             st.warning(f"Generator {bus} not found in parameters.")
+    #             idx = None
+    #         if idx is not None:
+    #             bau_gen = [hr[idx] for hr in st.session_state.bau_results['gen_per_hour_bau']]
+    #             wa_gen  = [hr[idx] for hr in st.session_state.weather_aware_results['gen_per_hour']]
 
-                fig2 = go.Figure()
-                fig2.add_trace(go.Bar(x=hours, y=planned, name='Planned Dispatch'))
-                fig2.add_trace(go.Bar(x=hours, y=bau_gen, name='Projected OPF: Current'))
-                fig2.add_trace(go.Bar(x=hours, y=wa_gen, name='Projected OPF: Weather-Aware'))
-                fig2.update_layout(
-                    title=f"Generator Dispatch Comparison at Generator {bus}",
-                    xaxis_title="Hour",
-                    yaxis_title="Generation (MWh)",
-                    barmode='group',
-                    template='plotly_dark',
-                    height=600, width=1000
-                )
-                st.plotly_chart(fig2, use_container_width=True)
+    #             fig2 = go.Figure()
+    #             fig2.add_trace(go.Bar(x=hours, y=planned, name='Planned Dispatch'))
+    #             fig2.add_trace(go.Bar(x=hours, y=bau_gen, name='Projected OPF: Current'))
+    #             fig2.add_trace(go.Bar(x=hours, y=wa_gen, name='Projected OPF: Weather-Aware'))
+    #             fig2.update_layout(
+    #                 title=f"Generator Dispatch Comparison at Generator {bus}",
+    #                 xaxis_title="Hour",
+    #                 yaxis_title="Generation (MWh)",
+    #                 barmode='group',
+    #                 template='plotly_dark',
+    #                 height=600, width=1000
+    #             )
+    #             st.plotly_chart(fig2, use_container_width=True)
 
 
 # ────────────────────────────────────────────────────────────────────────────
