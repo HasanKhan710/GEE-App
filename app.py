@@ -5801,44 +5801,35 @@ elif selection == "Data Analytics":
         st.info("Run **Business As Usual** and **Weather‑Aware System** first.")
         st.stop()
 
-    # ── re‑build network to recover gen order ───────────────────────────────
-    # (so we know exactly which generator corresponds to which index in gen_per_hour lists)
-    from your_app_module import initialize_network   # adjust import to match your file
-    net, load_dynamic, gen_dynamic = initialize_network(
-        st.session_state.network_data["df_bus"],
-        st.session_state.network_data["df_load"],
-        st.session_state.network_data["df_gen"],
-        st.session_state.network_data["df_line"],
-        st.session_state.network_data["df_trafo"],
-        st.session_state.network_data["df_load_profile"],
-        st.session_state.network_data["df_gen_profile"],
-    )
-    # now net.res_gen.bus.tolist() is the exact bus‐order of each entry in gen_per_hour lists
-    gen_buses = net.res_gen.bus.tolist()
-
     # ── common data ─────────────────────────────────────────────────────────
-    num_hours  = len(st.session_state.network_data["df_load_profile"])
-    hours      = list(range(num_hours))
+    num_hours    = len(st.session_state.network_data["df_load_profile"])
+    hours        = list(range(num_hours))
 
-    shed_bau   = st.session_state.bau_results["hourly_shed_bau"]
-    shed_wa    = st.session_state.weather_aware_results["hourly_shed"]
-    cost_bau_M = [c/1e6 for c in st.session_state.bau_results["business_as_usual_cost"]]
-    cost_wa_M  = [c/1e6 for c in st.session_state.weather_aware_results["cost"]]
+    # load‑shed & cost
+    shed_bau     = st.session_state.bau_results["hourly_shed_bau"]
+    shed_wa      = st.session_state.weather_aware_results["hourly_shed"]
+    cost_bau_M   = [c/1e6 for c in st.session_state.bau_results["business_as_usual_cost"]]
+    cost_wa_M    = [c/1e6 for c in st.session_state.weather_aware_results["cost"]]
 
-    df_line    = st.session_state.network_data["df_line"]
-    lb_bau     = np.array(st.session_state.bau_results["loading_percent_bau"])
-    lb_wa      = np.array(st.session_state.weather_aware_results["loading_percent"])
-    line_legs  = [f"{r['from_bus']}→{r['to_bus']}" for _,r in df_line.iterrows()]
-    palette    = px.colors.qualitative.Plotly
-    colours    = palette * (lb_bau.shape[1]//len(palette)+1)
+    # line‑loading
+    df_line      = st.session_state.network_data["df_line"]
+    lb_bau       = np.array(st.session_state.bau_results["loading_percent_bau"])
+    lb_wa        = np.array(st.session_state.weather_aware_results["loading_percent"])
+    legends      = [f"{r['from_bus']}→{r['to_bus']}" for _,r in df_line.iterrows()]
+    palette      = px.colors.qualitative.Plotly
+    colours      = palette * (lb_bau.shape[1]//len(palette)+1)
 
-    df_gen     = st.session_state.network_data["df_gen"]
-    df_gp      = st.session_state.network_data["df_gen_profile"]
-    # only buses that actually have a profile column
-    valid_gens = [b for b in gen_buses if f"p_mw_PV{b}" in df_gp.columns]
+    # generator profiles
+    df_gen       = st.session_state.network_data["df_gen"]
+    df_gp        = st.session_state.network_data["df_gen_profile"]
+    valid_gens   = [
+        int(b) for b in df_gen["bus"].tolist()[1:]
+        if f"p_mw_PV{b}" in df_gp.columns
+    ]
 
-    df_load    = st.session_state.network_data["df_load"]
-    valid_loads= df_load["bus"].astype(int).tolist()
+    # load‑bus list
+    df_load      = st.session_state.network_data["df_load"]
+    valid_loads  = df_load["bus"].astype(int).tolist()
 
     # ── init session flags ───────────────────────────────────────────────────
     for key in (
@@ -5855,12 +5846,14 @@ elif selection == "Data Analytics":
     if st.button("1) Hourly Load‑Shedding & Generation Cost Comparison"):
         st.session_state.show_comp = True
     if st.session_state.show_comp:
+        # load‑shedding lines
         fig1 = go.Figure()
         fig1.add_trace(go.Scatter(x=hours, y=shed_bau, mode="lines+markers", name="BAU Shed"))
         fig1.add_trace(go.Scatter(x=hours, y=shed_wa,  mode="lines+markers", name="WA Shed"))
         fig1.update_layout(title="Load‑Shedding Comparison", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
         st.plotly_chart(fig1, use_container_width=True)
 
+        # cost bars
         fig1b = go.Figure()
         fig1b.add_bar(x=hours, y=cost_bau_M, name="BAU Cost")
         fig1b.add_bar(x=hours, y=cost_wa_M,  name="WA Cost")
@@ -5873,7 +5866,7 @@ elif selection == "Data Analytics":
     if st.button("2) Cost Difference & Lost Savings (BAU vs WA)"):
         st.session_state.show_diff = True
     if st.session_state.show_diff:
-        # filled cost‑difference
+        # cost‑difference filled
         fig2 = go.Figure()
         fig2.add_trace(go.Scatter(
             x=hours + hours[::-1],
@@ -5886,7 +5879,7 @@ elif selection == "Data Analytics":
         fig2.update_layout(title="Hourly Cost Difference", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
         st.plotly_chart(fig2, use_container_width=True)
 
-        # lost savings area
+        # lost‑savings only
         lost = [wa - bau if wa>bau else 0 for wa,bau in zip(cost_wa_M,cost_bau_M)]
         fig2b = go.Figure()
         fig2b.add_trace(go.Scatter(
@@ -5903,15 +5896,16 @@ elif selection == "Data Analytics":
         st.session_state.show_lines = True
     if st.session_state.show_lines:
         x = list(range(lb_bau.shape[0]))
+        # BAU
         fig3 = go.Figure()
         for i in range(lb_bau.shape[1]):
-            fig3.add_trace(go.Scatter(x=x, y=lb_bau[:,i], name=line_legs[i], line=dict(color=colours[i])))
+            fig3.add_trace(go.Scatter(x=x, y=lb_bau[:,i], name=legends[i], line=dict(color=colours[i])))
         fig3.update_layout(title="BAU Line Loading", xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
         st.plotly_chart(fig3, use_container_width=True)
-
+        # WA
         fig3b = go.Figure()
         for i in range(lb_wa.shape[1]):
-            fig3b.add_trace(go.Scatter(x=x, y=lb_wa[:,i], name=line_legs[i], line=dict(dash="dash", color=colours[i])))
+            fig3b.add_trace(go.Scatter(x=x, y=lb_wa[:,i], name=legends[i], line=dict(dash="dash", color=colours[i])))
         fig3b.update_layout(title="WA Line Loading", xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
         st.plotly_chart(fig3b, use_container_width=True)
 
@@ -5936,20 +5930,18 @@ elif selection == "Data Analytics":
     # if st.button("5) Show Generator Dispatch Comparison"):
     #     st.session_state.show_gen = True
     # if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
-    #     b   = st.session_state.gen_to_plot
-    #     if b not in gen_buses:
-    #         st.error(f"Generator at bus {b} not present in the OPF results.")
-    #     else:
-    #         idx = gen_buses.index(b)
-    #         orig = df_gp[f"p_mw_PV{b}"].tolist()
-    #         bau  = [h[idx] for h in st.session_state.bau_results["gen_per_hour_bau"]]
-    #         wa   = [h[idx] for h in st.session_state.weather_aware_results["gen_per_hour"]]
-    #         fig5 = go.Figure()
-    #         fig5.add_bar(x=hours, y=orig, name="Planned")
-    #         fig5.add_bar(x=hours, y=bau,  name="BAU")
-    #         fig5.add_bar(x=hours, y=wa,   name="WA")
-    #         fig5.update_layout(barmode="group", title=f"Dispatch @ Gen Bus {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
-    #         st.plotly_chart(fig5, use_container_width=True)
+    #     b = st.session_state.gen_to_plot
+    #     col = f"p_mw_PV{b}"
+    #     orig = df_gp[col].tolist()
+    #     idx  = df_gen.reset_index().index[df_gen["bus"]==b][0]
+    #     bau  = [h[idx] for h in st.session_state.bau_results["gen_per_hour_bau"]]
+    #     wa   = [h[idx] for h in st.session_state.weather_aware_results["gen_per_hour"]]
+    #     fig5 = go.Figure()
+    #     fig5.add_bar(x=hours, y=orig, name="Planned")
+    #     fig5.add_bar(x=hours, y=bau,  name="BAU")
+    #     fig5.add_bar(x=hours, y=wa,   name="WA")
+    #     fig5.update_layout(barmode="group", title=f"Dispatch @ Gen {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
+    #     st.plotly_chart(fig5, use_container_width=True)
 
     # st.markdown("---")
 
@@ -5961,9 +5953,7 @@ elif selection == "Data Analytics":
         b = st.session_state.bus_to_plot
         col = f"p_mw_bus_{b}"
         lp  = st.session_state.network_data["df_load_profile"]
-        if col not in lp.columns:
-            st.warning(f"No profile data for bus {b}.")
-        else:
+        if col in lp.columns:
             dem = lp[col].tolist()
             idx = df_load.reset_index().index[df_load["bus"]==b][0]
             bau = [h[idx] for h in st.session_state.bau_results["served_load_per_hour"]]
@@ -5974,6 +5964,8 @@ elif selection == "Data Analytics":
             fig6.add_bar(x=hours, y=wa,  name="WA Served")
             fig6.update_layout(barmode="group", title=f"Load‑Served @ Bus {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
             st.plotly_chart(fig6, use_container_width=True)
+        else:
+            st.warning(f"No profile data for bus {b}.")
 
 
 # ────────────────────────────────────────────────────────────────────────────
