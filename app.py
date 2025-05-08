@@ -3302,7 +3302,7 @@ initialize_ee()
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
-pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Business As Usual", "Weather Aware System", "Data Analytics"]
+pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Projected future operations - Under Current OPF", "Weather Aware System", "Data Analytics"]
 selection = st.sidebar.radio("Go to", pages)
 
 # Shared session state initialization
@@ -4524,9 +4524,9 @@ elif selection == "Weather Risk Visualisation Using GEE":
                 st.info("Select parameters and click 'Process Weather Risk Data' to analyze weather risks to the electricity grid.")
                 
 
-# Page 3: Business As Usual
-elif selection == "Business As Usual":
-    st.title("Business As Usual")
+# Page 3: Projected future operations - Under Current OPF
+elif selection == "Projected future operations - Under Current OPF":
+    st.title("Projected future operations - Under Current OPF")
     
     # Validate required data
     required_keys = ['df_bus', 'df_load', 'df_gen', 'df_line', 'df_load_profile', 'df_gen_profile']
@@ -4557,8 +4557,8 @@ elif selection == "Business As Usual":
         capped_contingency = contingency_mode == "Capped Contingency Mode"
         
         # Button to run analysis
-        if st.button("Run Business As Usual Analysis"):
-            with st.spinner("Running Business As Usual analysis..."):
+        if st.button("Run Projected future operations - Under Current OPF Analysis"):
+            with st.spinner("Running Projected future operations - Under Current OPF analysis..."):
                 try:
                     # Extract data
                     network_data = st.session_state.network_data
@@ -4777,7 +4777,7 @@ elif selection == "Business As Usual":
                     }
                     
                 except Exception as e:
-                    st.error(f"Error running Business As Usual analysis: {str(e)}")
+                    st.error(f"Error running Projected future operations - Under Current OPF analysis: {str(e)}")
                     st.error(traceback.format_exc())
         
         if st.session_state.bau_results is not None:
@@ -4809,16 +4809,16 @@ elif selection == "Business As Usual":
         # Visualization cc
     
         # ────────────────────────────────────────────────────────────────────────────
-        # Visualisation – Business As Usual (final fix)
+        # Visualisation – Projected future operations - Under Current OPF (final fix)
         # ────────────────────────────────────────────────────────────────────────────
-        st.subheader("Visualize Business As Usual")
+        st.subheader("Visualize Projected future operations - Under Current OPF")
         
         # initialise session key that remembers which hour to show
         if "visualize_hour" not in st.session_state:
             st.session_state.visualize_hour = None
         
         if st.session_state.bau_results is None:
-            st.info("Please run the Business As Usual analysis first.")
+            st.info("Please run the Projected future operations - Under Current OPF analysis first.")
         else:
             num_hours   = len(st.session_state.network_data['df_load_profile'])
             hour_labels = [f"Hour {i}" for i in range(num_hours)]
@@ -4949,7 +4949,7 @@ elif selection == "Business As Usual":
                      style="position:absolute; top:90px; left:10px; z-index:9999;
                             background:rgba(255,255,255,0.9); padding:4px;
                             font-size:18px; font-weight:bold;">
-                  Business As Usual – Hour {hour_idx}
+                  Projected future operations - Under Current OPF – Hour {hour_idx}
                 </div>
                 """
                 m.get_root().html.add_child(folium.Element(title_html))
@@ -4976,7 +4976,7 @@ elif selection == "Weather Aware System":
     if any(k not in st.session_state or st.session_state[k] is None for k in req_keys):
         st.warning(
             "Run **Network Initialization**, **Weather Risk Visualisation**, "
-            "and **Business As Usual** first."
+            "and **Projected future operations - Under Current OPF** first."
         )
         st.stop()
 
@@ -5798,7 +5798,7 @@ elif selection == "Data Analytics":
         "weather_aware_results" not in st.session_state or
         st.session_state.bau_results is None or
         st.session_state.weather_aware_results is None):
-        st.info("Run **Business As Usual** and **Weather‑Aware System** first.")
+        st.info("Run **Projected future operations - Under Current OPF** and **Weather‑Aware System** first.")
         st.stop()
 
     # ── common data ─────────────────────────────────────────────────────────
@@ -6009,7 +6009,7 @@ elif selection == "About the App and Developers":
         ### Usage Workflow
         1. Navigate left‑hand sidebar → **Network Initialization** and upload your Excel model.  
         2. Tune thresholds on **Weather Risk Visualisation** and press *Process*.  
-        3. Run **Business As Usual** → then **Weather Aware System**.  
+        3. Run **Projected future operations - Under Current OPF** → then **Weather Aware System**.  
         4. Explore comparative plots in **Data Analytics**.  
 
         *(You can re‑run any page; session‑state keeps everything consistent.)*
