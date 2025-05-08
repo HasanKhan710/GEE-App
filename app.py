@@ -5316,6 +5316,7 @@ elif selection == "Weather Aware System":
                 geometry=[LineString(c) for c in df_line.geodata],
                 crs="EPSG:4326"
             )
+            no_of_lines = len(df_line) if df_trafo is None else len(df_line) - len(df_trafo)
             gdf["idx"]     = gdf.index
             gdf["loading"] = gdf["idx"].map(lambda i: loadings[i] if i < len(loadings) else 0.)
             weather_down = {
