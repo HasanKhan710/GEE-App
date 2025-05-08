@@ -5839,6 +5839,9 @@ elif selection == "Data Analytics":
     ):
         if key not in st.session_state:
             st.session_state[key] = False
+                
+    if "bus_to_plot" not in st.session_state:
+    st.session_state.bus_to_plot = None
 
     st.markdown("---")
 
@@ -5960,6 +5963,7 @@ elif selection == "Data Analytics":
 # ── PLOT 6: Load‑Served @ Selected Load Bus ─────────────────────────────
     sel_bus = st.selectbox("Select Load Bus", valid_loads, key="bus_select")
     if st.button("6) Show Load‑Served Comparison"):
+        st.session_state.bus_to_plot = sel_bus
         st.session_state.show_bus = True
     if st.session_state.show_bus and st.session_state.bus_to_plot is not None:
         b = st.session_state.bus_to_plot
