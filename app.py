@@ -5176,7 +5176,7 @@ elif selection == "Weather Aware System":
                 #         all_loads_zero_flag = 0
                 if net.OPF_converged:
                     record_loadings()
-                    wa_cost[hr] = net.res_cost
+                    wa_cost[hr] = net.res_cost    
                     serving_per_hour.append(net.load.p_mw.tolist())
                     gen_per_hour.append(net.res_gen.p_mw.tolist())
                     slack_per_hour.append(float(net.res_ext_grid.at[0,"p_mw"]))
@@ -5225,6 +5225,7 @@ elif selection == "Weather Aware System":
             # record final state after shedding -----------------------------
             record_loadings()
             wa_cost[hr] = net.res_cost if net.OPF_converged else wa_cost[hr-1]
+            loading_percent_wa[hr] = loading_percent_wa[hr] if net.OPF_converged else loading_percent_wa[hr-1]
             serving_per_hour.append(net.load.p_mw.tolist())
             gen_per_hour.append(net.res_gen.p_mw.tolist())
             slack_per_hour.append(float(net.res_ext_grid.at[0,"p_mw"]))
