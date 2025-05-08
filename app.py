@@ -5764,6 +5764,27 @@ elif selection == "Data Analytics":
                 st.plotly_chart(fig_bus, use_container_width=True)
 
    # PLOT Slack Generator Comparison
+    # PLOT Slack Generator Comparison
+    if st.session_state.show_slack:
+        # retrieve arrays
+        hours = list(range(24))
+        planned = st.session_state.bau_results['slack_per_hour_bau']
+        bau_slack = st.session_state.bau_results['slack_per_hour_bau']
+        wa_slack = st.session_state.weather_aware_results['slack_per_hour']
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=hours, y=planned, name='Planned Slack Dispatch'))
+        fig.add_trace(go.Bar(x=hours, y=bau_slack, name='Projected OPF: Current'))
+        fig.add_trace(go.Bar(x=hours, y=wa_slack, name='Projected OPF: Weather-Aware'))
+        fig.update_layout(
+            title="Hourly Slack Generator Dispatch Comparison",
+            xaxis_title="Hour",
+            yaxis_title="Generation (MWh)",
+            barmode='group',
+            template='plotly_dark',
+            height=600, width=1000
+        )
+        st.plotly_chart(fig, use_container_width=True)
         
 
     # PLOT Generator Dispatch at Selected Generator
