@@ -5480,9 +5480,13 @@ elif selection == "Data Analytics":
     # --------------------------------------------------------------------- #
     # persistent UI flags
     # --------------------------------------------------------------------- #
-    for k in ("show_comp", "show_diff", "show_lines", "show_bus", "bus_to_plot"):
+    # for k in ("show_comp", "show_diff", "show_lines", "show_bus", "bus_to_plot"):
+    #     if k not in st.session_state:
+    #         st.session_state[k] = False if k != "bus_to_plot" else None
+     # Initialize session state flags for new plots
+    for k in ("show_comp", "show_diff", "show_lines", "show_bus", "bus_to_plot", "show_slack", "show_gen", "gen_to_plot"):  
         if k not in st.session_state:
-            st.session_state[k] = False if k != "bus_to_plot" else None
+            st.session_state[k] = False if not k.endswith("_to_plot") else None
 
     # --------------------------------------------------------------------- #
     # three always‑visible buttons
@@ -5497,6 +5501,19 @@ elif selection == "Data Analytics":
     with col3:
         if st.button("Line‑Loading‑over‑Time"):
             st.session_state.show_lines = True
+
+    # Row of buttons for new generator analytics
+    col4, col5 = st.columns(2)
+    with col4:
+        if st.button("Hourly Slack Generator Dispatch Comparison"):
+            st.session_state.show_slack = True
+    with col5:
+        # generator selection dropdown
+        gen_options = st.session_state.network_data["df_gen"]["bus"].astype(int).tolist()
+        sel_gen = st.selectbox("Select a Generator for detailed dispatch comparison:", gen_options, key="gen_select")
+        if st.button("Generator Dispatch at Selected Generator"):
+            st.session_state.show_gen = True
+            st.session_state.gen_to_plot = sel_gen
     # ------------------------------------------------------------------ #
     #  extra UI for “Plot 4”  –  pick a load‑bus & make the button
     # ------------------------------------------------------------------ #
@@ -5688,6 +5705,65 @@ elif selection == "Data Analytics":
                     margin=dict(l=40, r=40, t=60, b=40)
                 )
                 st.plotly_chart(fig_bus, use_container_width=True)
+
+   # PLOT Slack Generator Comparison
+    if st.session_state.show_slack:
+        # retrieve arrays
+        hours = list(range(24))
+        planned = st.session_state.bau_results['slack_per_hour_bau']
+        bau_slack = st.session_state.bau_results['slack_per_hour_bau']
+        wa_slack = st.session_state.weather_aware_results['slack_per_hour']
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=hours, y=planned, name='Planned Slack Dispatch'))
+        fig.add_trace(go.Bar(x=hours, y=bau_slack, name='Projected OPF: Current'))
+        fig.add_trace(go.Bar(x=hours, y=wa_slack, name='Projected OPF: Weather-Aware'))
+        fig.update_layout(
+            title="Hourly Slack Generator Dispatch Comparison",
+            xaxis_title="Hour",
+            yaxis_title="Generation (MWh)",
+            barmode='group',
+            template='plotly_dark',
+            height=600, width=1000
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # PLOT Generator Dispatch at Selected Generator
+    if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
+        bus = st.session_state.gen_to_plot
+        # read profile
+        df_gen_profile = st.session_state.network_data['df_gen_profile']
+        col_name = f"p_mw_PV{bus}"
+        if col_name not in df_gen_profile.columns:
+            st.warning(f"Column {col_name} not found in Generator Profile.")
+        else:
+            hours = list(range(24))
+            planned = df_gen_profile[col_name].tolist()
+            # find index of this generator in df_gen
+            dfg = st.session_state.network_data['df_gen']
+            try:
+                idx = dfg.reset_index().index[dfg['bus'] == bus][0]
+            except IndexError:
+                st.warning(f"Generator {bus} not found in parameters.")
+                idx = None
+            if idx is not None:
+                bau_gen = [hr[idx] for hr in st.session_state.bau_results['gen_per_hour_bau']]
+                wa_gen  = [hr[idx] for hr in st.session_state.weather_aware_results['gen_per_hour']]
+
+                fig2 = go.Figure()
+                fig2.add_trace(go.Bar(x=hours, y=planned, name='Planned Dispatch'))
+                fig2.add_trace(go.Bar(x=hours, y=bau_gen, name='Projected OPF: Current'))
+                fig2.add_trace(go.Bar(x=hours, y=wa_gen, name='Projected OPF: Weather-Aware'))
+                fig2.update_layout(
+                    title=f"Generator Dispatch Comparison at Generator {bus}",
+                    xaxis_title="Hour",
+                    yaxis_title="Generation (MWh)",
+                    barmode='group',
+                    template='plotly_dark',
+                    height=600, width=1000
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # Page 0 :  About the App
