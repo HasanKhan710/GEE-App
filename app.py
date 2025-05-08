@@ -5803,7 +5803,6 @@ elif selection == "Data Analytics":
 
     # ── re‑build network to recover gen order ───────────────────────────────
     # (so we know exactly which generator corresponds to which index in gen_per_hour lists)
-    from your_app_module import initialize_network   # adjust import to match your file
     net, load_dynamic, gen_dynamic = initialize_network(
         st.session_state.network_data["df_bus"],
         st.session_state.network_data["df_load"],
