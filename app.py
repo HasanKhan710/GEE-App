@@ -5793,7 +5793,7 @@ elif selection == "Data Analytics":
 
     st.title("Data Analytics")
 
-    # ── Sanity check ───────────────────────────────────────────────────────
+    # ── sanity‑check ─────────────────────────────────────────────────────────
     if ("bau_results" not in st.session_state or
         "weather_aware_results" not in st.session_state or
         st.session_state.bau_results is None or
@@ -5801,99 +5801,118 @@ elif selection == "Data Analytics":
         st.info("Run **Business As Usual** and **Weather‑Aware System** first.")
         st.stop()
 
-    # ── Common data ─────────────────────────────────────────────────────────
-    num_hours     = len(st.session_state.network_data["df_load_profile"])
-    hours         = list(range(num_hours))
+    # ── common data ─────────────────────────────────────────────────────────
+    num_hours    = len(st.session_state.network_data["df_load_profile"])
+    hours        = list(range(num_hours))
 
-    # load‑shedding & cost
-    load_bau      = st.session_state.bau_results["hourly_shed_bau"]
-    load_wa       = st.session_state.weather_aware_results["hourly_shed"]
-    cost_bau_M    = [c/1e6 for c in st.session_state.bau_results["business_as_usual_cost"]]
-    cost_wa_M     = [c/1e6 for c in st.session_state.weather_aware_results["cost"]]
+    # load‑shed & cost
+    shed_bau     = st.session_state.bau_results["hourly_shed_bau"]
+    shed_wa      = st.session_state.weather_aware_results["hourly_shed"]
+    cost_bau_M   = [c/1e6 for c in st.session_state.bau_results["business_as_usual_cost"]]
+    cost_wa_M    = [c/1e6 for c in st.session_state.weather_aware_results["cost"]]
 
     # line‑loading
-    df_line       = st.session_state.network_data["df_line"]
-    loading_bau   = np.array(st.session_state.bau_results["loading_percent_bau"])
-    loading_wa    = np.array(st.session_state.weather_aware_results["loading_percent"])
-    line_legends  = [f"{r['from_bus']}→{r['to_bus']}" for _,r in df_line.iterrows()]
-    palette       = px.colors.qualitative.Plotly
-    colours       = palette * (loading_bau.shape[1]//len(palette)+1)
+    df_line      = st.session_state.network_data["df_line"]
+    lb_bau       = np.array(st.session_state.bau_results["loading_percent_bau"])
+    lb_wa        = np.array(st.session_state.weather_aware_results["loading_percent"])
+    legends      = [f"{r['from_bus']}→{r['to_bus']}" for _,r in df_line.iterrows()]
+    palette      = px.colors.qualitative.Plotly
+    colours      = palette * (lb_bau.shape[1]//len(palette)+1)
 
-    # generator data
-    df_gen        = st.session_state.network_data["df_gen"]
-    df_gen_prof   = st.session_state.network_data["df_gen_profile"]
-    valid_gens    = [
+    # generator profiles
+    df_gen       = st.session_state.network_data["df_gen"]
+    df_gp        = st.session_state.network_data["df_gen_profile"]
+    valid_gens   = [
         int(b) for b in df_gen["bus"].tolist()[1:]
-        if f"p_mw_PV{b}" in df_gen_prof.columns
+        if f"p_mw_PV{b}" in df_gp.columns
     ]
 
-    # load‑bus options
-    df_load       = st.session_state.network_data["df_load"]
-    valid_loads   = df_load["bus"].astype(int).tolist()
+    # load‑bus list
+    df_load      = st.session_state.network_data["df_load"]
+    valid_loads  = df_load["bus"].astype(int).tolist()
 
-    # ── Init session flags ───────────────────────────────────────────────────
+    # ── init session flags ───────────────────────────────────────────────────
     for key in (
-        "show_comp", "show_diff", "show_lines",
-        "show_slack", "show_gen", "gen_to_plot",
-        "show_bus",  "bus_to_plot"
+        "show_comp","show_diff","show_lines",
+        "show_slack","show_gen","gen_to_plot",
+        "show_bus","bus_to_plot"
     ):
         if key not in st.session_state:
             st.session_state[key] = False
 
-    # ── Button + Plot 1: Load‑shedding & Cost ───────────────────────────────
-    if st.button("Hourly Load Shedding & Generation Cost Comparison"):
+    st.markdown("---")
+
+    # ── PLOT 1: Load‑shedding & Cost ────────────────────────────────────────
+    if st.button("1) Hourly Load‑Shedding & Generation Cost Comparison"):
         st.session_state.show_comp = True
     if st.session_state.show_comp:
-        # load‑shedding
+        # load‑shedding lines
         fig1 = go.Figure()
-        fig1.add_trace(go.Scatter(x=hours, y=load_bau, mode="lines+markers", name="BAU Shed"))
-        fig1.add_trace(go.Scatter(x=hours, y=load_wa,  mode="lines+markers", name="WA Shed"))
-        fig1.update_layout(title="Load Shedding Comparison", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
+        fig1.add_trace(go.Scatter(x=hours, y=shed_bau, mode="lines+markers", name="BAU Shed"))
+        fig1.add_trace(go.Scatter(x=hours, y=shed_wa,  mode="lines+markers", name="WA Shed"))
+        fig1.update_layout(title="Load‑Shedding Comparison", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
         st.plotly_chart(fig1, use_container_width=True)
 
-        # cost
+        # cost bars
         fig1b = go.Figure()
         fig1b.add_bar(x=hours, y=cost_bau_M, name="BAU Cost")
         fig1b.add_bar(x=hours, y=cost_wa_M,  name="WA Cost")
-        fig1b.update_layout(barmode="group", title="Generation Cost Comparison", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
+        fig1b.update_layout(barmode="group", title="Generation Cost Comparison", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
         st.plotly_chart(fig1b, use_container_width=True)
 
-    # ── Button + Plot 2: Cost Difference & Lost Savings ──────────────────────
-    if st.button("Cost Difference & Lost Savings (BAU vs WA)"):
+    st.markdown("---")
+
+    # ── PLOT 2: Cost‑Difference & Lost Savings ───────────────────────────────
+    if st.button("2) Cost Difference & Lost Savings (BAU vs WA)"):
         st.session_state.show_diff = True
     if st.session_state.show_diff:
-        # difference fill
+        # cost‑difference filled
         fig2 = go.Figure()
         fig2.add_trace(go.Scatter(
             x=hours + hours[::-1],
             y=cost_bau_M + cost_wa_M[::-1],
-            fill="toself", name="Cost Difference"))
-        # lines
+            fill="toself", fillcolor="rgba(255,140,0,0.3)",
+            line=dict(color="rgba(0,0,0,0)"),
+            name="Cost Difference"))
         fig2.add_trace(go.Scatter(x=hours, y=cost_bau_M, name="BAU Cost"))
         fig2.add_trace(go.Scatter(x=hours, y=cost_wa_M,  name="WA Cost"))
-        fig2.update_layout(title="Hourly Cost Difference", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
+        fig2.update_layout(title="Hourly Cost Difference", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
         st.plotly_chart(fig2, use_container_width=True)
 
-    # ── Button + Plot 3: Line‑Loading Evolution ──────────────────────────────
-    if st.button("Line‑Loading Over Time"):
+        # lost‑savings only
+        lost = [wa - bau if wa>bau else 0 for wa,bau in zip(cost_wa_M,cost_bau_M)]
+        fig2b = go.Figure()
+        fig2b.add_trace(go.Scatter(
+            x=hours, y=lost, fill="tozeroy",
+            fillcolor="rgba(255,99,71,0.6)", mode="none",
+            name="Lost Savings"))
+        fig2b.update_layout(title="Lost Savings (WA > BAU)", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
+        st.plotly_chart(fig2b, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── PLOT 3: Line‑Loading Evolution ───────────────────────────────────────
+    if st.button("3) Line‑Loading Over Time"):
         st.session_state.show_lines = True
     if st.session_state.show_lines:
-        x = list(range(loading_bau.shape[0]))
+        x = list(range(lb_bau.shape[0]))
         # BAU
         fig3 = go.Figure()
-        for i in range(loading_bau.shape[1]):
-            fig3.add_trace(go.Scatter(x=x, y=loading_bau[:,i], name=line_legends[i], line=dict(color=colours[i])))
+        for i in range(lb_bau.shape[1]):
+            fig3.add_trace(go.Scatter(x=x, y=lb_bau[:,i], name=legends[i], line=dict(color=colours[i])))
         fig3.update_layout(title="BAU Line Loading", xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
         st.plotly_chart(fig3, use_container_width=True)
         # WA
         fig3b = go.Figure()
-        for i in range(loading_wa.shape[1]):
-            fig3b.add_trace(go.Scatter(x=x, y=loading_wa[:,i], name=line_legends[i], line=dict(dash="dash", color=colours[i])))
+        for i in range(lb_wa.shape[1]):
+            fig3b.add_trace(go.Scatter(x=x, y=lb_wa[:,i], name=legends[i], line=dict(dash="dash", color=colours[i])))
         fig3b.update_layout(title="WA Line Loading", xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
         st.plotly_chart(fig3b, use_container_width=True)
 
-    # ── Button + Plot 4: Slack Generator Comparison ──────────────────────────
-    if st.button("Hourly Slack Generator Dispatch Comparison"):
+    st.markdown("---")
+
+    # ── PLOT 4: Slack Generator Comparison ──────────────────────────────────
+    if st.button("4) Hourly Slack Generator Dispatch Comparison"):
         st.session_state.show_slack = True
     if st.session_state.show_slack:
         sl_bau = st.session_state.bau_results["slack_per_hour_bau"]
@@ -5904,51 +5923,51 @@ elif selection == "Data Analytics":
         fig4.update_layout(barmode="group", title="Slack Generator Dispatch", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
         st.plotly_chart(fig4, use_container_width=True)
 
-    # ── Button + Plot 5: Generator Dispatch at Selected Generator ───────────
-    st.write("")  # spacer
-    gen = st.selectbox("Select Generator Bus for Dispatch Comparison", valid_gens, key="gen_to_plot")
-    if st.button("Show Generator Dispatch Comparison"):
+    st.markdown("---")
+
+    # ── PLOT 5: Generator Dispatch @ Selected Generator ────────────────────
+    gen = st.selectbox("Select Generator Bus", valid_gens, key="gen_to_plot")
+    if st.button("5) Show Generator Dispatch Comparison"):
         st.session_state.show_gen = True
-        st.session_state.gen_to_plot = gen
     if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
-        bus = st.session_state.gen_to_plot
-        col = f"p_mw_PV{bus}"
-        orig = df_gen_prof[col].tolist()
-        idx  = df_gen.reset_index().index[df_gen["bus"]==bus][0]
-        bau = [hr[idx] for hr in st.session_state.bau_results["gen_per_hour_bau"]]
-        wa  = [hr[idx] for hr in st.session_state.weather_aware_results["gen_per_hour"]]
+        b = st.session_state.gen_to_plot
+        col = f"p_mw_PV{b}"
+        orig = df_gp[col].tolist()
+        idx  = df_gen.reset_index().index[df_gen["bus"]==b][0]
+        bau  = [h[idx] for h in st.session_state.bau_results["gen_per_hour_bau"]]
+        wa   = [h[idx] for h in st.session_state.weather_aware_results["gen_per_hour"]]
         fig5 = go.Figure()
         fig5.add_bar(x=hours, y=orig, name="Planned")
         fig5.add_bar(x=hours, y=bau,  name="BAU")
         fig5.add_bar(x=hours, y=wa,   name="WA")
-        fig5.update_layout(barmode="group", title=f"Dispatch @ Gen {bus}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
+        fig5.update_layout(barmode="group", title=f"Dispatch @ Gen {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
         st.plotly_chart(fig5, use_container_width=True)
 
-    # ── Button + Plot 6: Load‑Served at Selected Load Bus ────────────────────
-    st.write("")  # spacer
-    lb = st.selectbox("Select Load Bus for Served‑Load Comparison", valid_loads, key="bus_to_plot")
-    if st.button("Show Load‑Served Comparison"):
+    st.markdown("---")
+
+    # ── PLOT 6: Load‑Served @ Selected Load Bus ─────────────────────────────
+    lb = st.selectbox("Select Load Bus", valid_loads, key="bus_to_plot")
+    if st.button("6) Show Load‑Served Comparison"):
         st.session_state.show_bus = True
-        st.session_state.bus_to_plot = lb
     if st.session_state.show_bus and st.session_state.bus_to_plot is not None:
-        bus = st.session_state.bus_to_plot
-        col = f"p_mw_bus_{bus}"
+        b = st.session_state.bus_to_plot
+        col = f"p_mw_bus_{b}"
         lp  = st.session_state.network_data["df_load_profile"]
         if col in lp.columns:
-            demand = lp[col].tolist()
-            idx    = df_load.reset_index().index[df_load["bus"]==bus][0]
-            bau    = [h[idx] for h in st.session_state.bau_results["served_load_per_hour"]]
-            wa     = [h[idx] for h in st.session_state.weather_aware_results["served_load"]]
+            dem = lp[col].tolist()
+            idx = df_load.reset_index().index[df_load["bus"]==b][0]
+            bau = [h[idx] for h in st.session_state.bau_results["served_load_per_hour"]]
+            wa  = [h[idx] for h in st.session_state.weather_aware_results["served_load"]]
             fig6 = go.Figure()
-            fig6.add_bar(x=hours, y=demand, name="Demand")
-            fig6.add_bar(x=hours, y=bau,    name="BAU Served")
-            fig6.add_bar(x=hours, y=wa,     name="WA Served")
-            fig6.update_layout(barmode="group", title=f"Load‑Served @ Bus {bus}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
+            fig6.add_bar(x=hours, y=dem, name="Demand")
+            fig6.add_bar(x=hours, y=bau, name="BAU Served")
+            fig6.add_bar(x=hours, y=wa,  name="WA Served")
+            fig6.update_layout(barmode="group", title=f"Load‑Served @ Bus {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
             st.plotly_chart(fig6, use_container_width=True)
         else:
-            st.warning(f"No profile for bus {bus}.")
+            st.warning(f"No profile data for bus {b}.")
 
-    
+
 # ────────────────────────────────────────────────────────────────────────────
 # Page 0 :  About the App
 # ────────────────────────────────────────────────────────────────────────────
