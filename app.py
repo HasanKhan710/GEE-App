@@ -3302,7 +3302,7 @@ initialize_ee()
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
-pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Projected future operations - Under Current OPF", "Weather Aware System", "Data Analytics"]
+pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Projected future operations - Under Current OPF", "Projected Operation Under Weather Risk Aware OPF", "Data Analytics"]
 selection = st.sidebar.radio("Go to", pages)
 
 # Shared session state initialization
@@ -4968,8 +4968,8 @@ elif selection == "Projected future operations - Under Current OPF":
 # ────────────────────────────────────────────────────────────────────────────
 # Page 4 :  Weather‑Aware System
 # ────────────────────────────────────────────────────────────────────────────
-elif selection == "Weather Aware System":
-    st.title("Weather Aware System")
+elif selection == "Projected Operation Under Weather Risk Aware OPF":
+    st.title("Projected Operation Under Weather Risk Aware OPF")
 
     # --- sanity checks ------------------------------------------------------
     req_keys = ["network_data", "line_outage_data", "bau_results"]
@@ -6009,7 +6009,7 @@ elif selection == "About the App and Developers":
         ### Usage Workflow
         1. Navigate left‑hand sidebar → **Network Initialization** and upload your Excel model.  
         2. Tune thresholds on **Weather Risk Visualisation** and press *Process*.  
-        3. Run **Projected future operations - Under Current OPF** → then **Weather Aware System**.  
+        3. Run **Projected future operations - Under Current OPF** → then **Projected Operation Under Weather Risk Aware OPF**.  
         4. Explore comparative plots in **Data Analytics**.  
 
         *(You can re‑run any page; session‑state keeps everything consistent.)*
