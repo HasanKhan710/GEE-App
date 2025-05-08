@@ -5901,12 +5901,12 @@ elif selection == "Data Analytics":
 
         fig2b = go.Figure()
         # generation‐cost difference region
-        fig2b.add_trace(go.Scatter(
-            x=hours, y=lost_savings, fill="tozeroy", mode="none",
-            name="Difference in Generation Cost",
-            fillcolor="rgba(255,99,71,0.6)",
-            hovertemplate="Hour %{x}: %{y:.2f} M PKR<extra></extra>"
-        ))
+        # fig2b.add_trace(go.Scatter(
+        #     x=hours, y=lost_savings, fill="tozeroy", mode="none",
+        #     name="Difference in Generation Cost",
+        #     fillcolor="rgba(255,99,71,0.6)",
+        #     hovertemplate="Hour %{x}: %{y:.2f} M PKR<extra></extra>"
+        # ))
         # lost‐load revenue region
         fig2b.add_trace(go.Scatter(
             x=hours, y=diff_ld, fill="tozeroy", mode="none",
