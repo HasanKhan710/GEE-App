@@ -5879,15 +5879,47 @@ elif selection == "Data Analytics":
         fig2.update_layout(title="Hourly Cost Difference", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
         st.plotly_chart(fig2, use_container_width=True)
 
-        # lost‑savings only
-        lost = [wa - bau if wa>bau else 0 for wa,bau in zip(cost_wa_M,cost_bau_M)]
+        # # lost‑savings only
+        # lost = [wa - bau if wa>bau else 0 for wa,bau in zip(cost_wa_M,cost_bau_M)]
+        # fig2b = go.Figure()
+        # fig2b.add_trace(go.Scatter(
+        #     x=hours, y=lost, fill="tozeroy",
+        #     fillcolor="rgba(255,99,71,0.6)", mode="none",
+        #     name="Potential Loss of Revenue"))
+        # fig2b.update_layout(title="Potential Loss of Revenue", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
+        # st.plotly_chart(fig2b, use_container_width=True)
+                # ── LOST‑SAVINGS & LOST‑LOAD DIFFERENCE ─────────────────────────
+        # compute lost‐savings (generation cost difference) & lost‐load revenue
+        lost_savings = [w - b if w>b else 0 for w,b in zip(cost_wa_M, cost_bau_M)]
+        # convert hourly shed to float then compute lost‐load (×45,000 PKR/MWh → millions)
+        bau_ld = [float(x) for x in shed_bau]
+        wa_ld  = [float(x) for x in shed_wa]
+        diff_ld = [(b - w)*(45000/1e6) for b,w in zip(bau_ld, wa_ld)]
+
         fig2b = go.Figure()
+        # generation‐cost difference region
         fig2b.add_trace(go.Scatter(
-            x=hours, y=lost, fill="tozeroy",
-            fillcolor="rgba(255,99,71,0.6)", mode="none",
-            name="Potential Loss of Revenue"))
-        fig2b.update_layout(title="Potential Loss of Revenue", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
+            x=hours, y=lost_savings, fill="tozeroy", mode="none",
+            name="Difference in Generation Cost",
+            fillcolor="rgba(255,99,71,0.6)",
+            hovertemplate="Hour %{x}: %{y:.2f} M PKR<extra></extra>"
+        ))
+        # lost‐load revenue region
+        fig2b.add_trace(go.Scatter(
+            x=hours, y=diff_ld, fill="tozeroy", mode="none",
+            name="Potential Loss of Revenue",
+            fillcolor="rgba(0,0,255,0.4)",
+            hovertemplate="Hour %{x}: %{y:.2f} M PKR<extra></extra>"
+        ))
+        fig2b.update_layout(
+            title="Potential Loss of Revenue",
+            xaxis_title="Hour",
+            yaxis_title="Millions PKR",
+            template="plotly_dark",
+            width=1000, height=500
+        )
         st.plotly_chart(fig2b, use_container_width=True)
+
 
     st.markdown("---")
 
