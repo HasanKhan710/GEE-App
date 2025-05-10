@@ -4523,7 +4523,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
             else:
                 st.info("Select parameters and click 'Process Weather Risk Data' to analyze weather risks to the electricity grid.")
                 
-
+ 
 # Page 3: Projected future operations - Under Current OPF
 elif selection == "Projected Operation - Under Current OPF":
     st.title("Projected Operation - Under Current OPF")
