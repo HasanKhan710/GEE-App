@@ -3302,7 +3302,7 @@ initialize_ee()
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
-pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Projected Operations - Under Current OPF", "Projected Operation - Under Weather Risk Aware OPF", "Data Analytics"]
+pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Projected Operation - Under Current OPF", "Projected Operation - Under Weather Risk Aware OPF", "Data Analytics"]
 selection = st.sidebar.radio("Go to", pages)
 
 # Shared session state initialization
@@ -4525,8 +4525,8 @@ elif selection == "Weather Risk Visualisation Using GEE":
                 
 
 # Page 3: Projected future operations - Under Current OPF
-elif selection == "Projected Operations - Under Current OPF":
-    st.title("Projected Operations - Under Current OPF")
+elif selection == "Projected Operation - Under Current OPF":
+    st.title("Projected Operation - Under Current OPF")
     
     # Validate required data
     required_keys = ['df_bus', 'df_load', 'df_gen', 'df_line', 'df_load_profile', 'df_gen_profile']
@@ -4557,8 +4557,8 @@ elif selection == "Projected Operations - Under Current OPF":
         capped_contingency = contingency_mode == "Capped Contingency Mode"
         
         # Button to run analysis
-        if st.button("Run Projected Operations - Under Current OPF Analysis"):
-            with st.spinner("Running Projected Operations - Under Current OPF analysis..."):
+        if st.button("Run Projected Operation - Under Current OPF Analysis"):
+            with st.spinner("Running Projected Operation - Under Current OPF analysis..."):
                 try:
                     # Extract data
                     network_data = st.session_state.network_data
@@ -4777,7 +4777,7 @@ elif selection == "Projected Operations - Under Current OPF":
                     }
                     
                 except Exception as e:
-                    st.error(f"Error running Projected Operations - Under Current OPF analysis: {str(e)}")
+                    st.error(f"Error running Projected Operation - Under Current OPF analysis: {str(e)}")
                     st.error(traceback.format_exc())
         
         if st.session_state.bau_results is not None:
@@ -4811,14 +4811,14 @@ elif selection == "Projected Operations - Under Current OPF":
         # ────────────────────────────────────────────────────────────────────────────
         # Visualisation – Projected future operations - Under Current OPF (final fix)
         # ────────────────────────────────────────────────────────────────────────────
-        st.subheader("Visualize Projected Operations - Under Current OPF")
+        st.subheader("Visualize Projected Operation - Under Current OPF")
         
         # initialise session key that remembers which hour to show
         if "visualize_hour" not in st.session_state:
             st.session_state.visualize_hour = None
         
         if st.session_state.bau_results is None:
-            st.info("Please run the Projected Operations - Under Current OPF analysis first.")
+            st.info("Please run the Projected Operation - Under Current OPF analysis first.")
         else:
             num_hours   = len(st.session_state.network_data['df_load_profile'])
             hour_labels = [f"Hour {i}" for i in range(num_hours)]
@@ -4949,7 +4949,7 @@ elif selection == "Projected Operations - Under Current OPF":
                      style="position:absolute; top:90px; left:10px; z-index:9999;
                             background:rgba(255,255,255,0.9); padding:4px;
                             font-size:18px; font-weight:bold;">
-                  Projected Operations - Under Current OPF – Hour {hour_idx}
+                  Projected Operation - Under Current OPF – Hour {hour_idx}
                 </div>
                 """
                 m.get_root().html.add_child(folium.Element(title_html))
@@ -4976,7 +4976,7 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
     if any(k not in st.session_state or st.session_state[k] is None for k in req_keys):
         st.warning(
             "Run **Network Initialization**, **Weather Risk Visualisation**, "
-            "and **Projected Operations - Under Current OPF** first."
+            "and **Projected Operation - Under Current OPF** first."
         )
         st.stop()
 
@@ -5798,7 +5798,7 @@ elif selection == "Data Analytics":
         "weather_aware_results" not in st.session_state or
         st.session_state.bau_results is None or
         st.session_state.weather_aware_results is None):
-        st.info("Run **Projected Operations - Under Current OPF** and **Weather‑Aware System** first.")
+        st.info("Run **Projected Operation - Under Current OPF** and **Weather‑Aware System** first.")
         st.stop()
 
     # ── common data ─────────────────────────────────────────────────────────
@@ -5877,8 +5877,8 @@ elif selection == "Data Analytics":
             fill="toself", fillcolor="rgba(255,140,0,0.3)",
             line=dict(color="rgba(0,0,0,0)"),
             name="Cost Difference"))
-        fig2.add_trace(go.Scatter(x=hours, y=cost_bau_M, name="Projected Operations: Current OPF Cost"))
-        fig2.add_trace(go.Scatter(x=hours, y=cost_wa_M,  name="Projected Operations: Weather Risk Aware Cost"))
+        fig2.add_trace(go.Scatter(x=hours, y=cost_bau_M, name="Projected Operation: Current OPF Cost"))
+        fig2.add_trace(go.Scatter(x=hours, y=cost_wa_M,  name="Projected Operation: Weather Risk Aware Cost"))
         fig2.update_layout(title="Hourly Cost Difference", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
         st.plotly_chart(fig2, use_container_width=True)
 
@@ -5935,13 +5935,13 @@ elif selection == "Data Analytics":
         fig3 = go.Figure()
         for i in range(lb_bau.shape[1]):
             fig3.add_trace(go.Scatter(x=x, y=lb_bau[:,i], name=legends[i], line=dict(color=colours[i])))
-        fig3.update_layout(title='Projected Operations - Current OPF Line Loading Over Time', xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
+        fig3.update_layout(title='Projected Operation - Current OPF Line Loading Over Time', xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
         st.plotly_chart(fig3, use_container_width=True)
         # WA
         fig3b = go.Figure()
         for i in range(lb_wa.shape[1]):
             fig3b.add_trace(go.Scatter(x=x, y=lb_wa[:,i], name=legends[i], line=dict(dash="dash", color=colours[i])))
-        fig3b.update_layout(title='Projected Operations - Weather Risk Aware OPF Line Loading Over Time', xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
+        fig3b.update_layout(title='Projected Operation - Weather Risk Aware OPF Line Loading Over Time', xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
         st.plotly_chart(fig3b, use_container_width=True)
 
     st.markdown("---")
@@ -5953,8 +5953,8 @@ elif selection == "Data Analytics":
         sl_bau = st.session_state.bau_results["slack_per_hour_bau"]
         sl_wa  = st.session_state.weather_aware_results["slack_per_hour"]
         fig4 = go.Figure()
-        fig4.add_bar(x=list(range(24)), y=sl_bau, name="Projected Operations - Current OPF Slack")
-        fig4.add_bar(x=list(range(24)), y=sl_wa,  name="Projected Operations - Weather Risk Aware OPF Slack")
+        fig4.add_bar(x=list(range(24)), y=sl_bau, name="Projected Operation - Current OPF Slack")
+        fig4.add_bar(x=list(range(24)), y=sl_wa,  name="Projected Operation - Weather Risk Aware OPF Slack")
         fig4.update_layout(barmode="group", title="Slack Generator Dispatch", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
         st.plotly_chart(fig4, use_container_width=True)
 
@@ -5976,8 +5976,8 @@ elif selection == "Data Analytics":
             wa  = [h[idx] for h in st.session_state.weather_aware_results["served_load"]]
             fig6 = go.Figure()
             fig6.add_bar(x=hours, y=dem, name="Demand")
-            fig6.add_bar(x=hours, y=bau, name="Projected Operations - Current OPF Served")
-            fig6.add_bar(x=hours, y=wa,  name="Projected Operations - Weather Risk Aware OPF Served")
+            fig6.add_bar(x=hours, y=bau, name="Projected Operation - Current OPF Served")
+            fig6.add_bar(x=hours, y=wa,  name="Projected Operation - Weather Risk Aware OPF Served")
             fig6.update_layout(barmode="group", title=f"Load‑Served @ Bus {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
             st.plotly_chart(fig6, use_container_width=True)
         else:
@@ -6047,7 +6047,7 @@ elif selection == "About the App and Developers":
         ### Usage Workflow
         1. Navigate left‑hand sidebar → **Network Initialization** and upload your Excel model.  
         2. Tune thresholds on **Weather Risk Visualisation** and press *Process*.  
-        3. Run **Projected Operations - Under Current OPF** → then **Projected Operation Under Weather Risk Aware OPF**.  
+        3. Run **Projected Operation - Under Current OPF** → then **Projected Operation Under Weather Risk Aware OPF**.  
         4. Explore comparative plots in **Data Analytics**.  
 
         *(You can re‑run any page; session‑state keeps everything consistent.)*
