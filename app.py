@@ -3302,7 +3302,7 @@ initialize_ee()
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
-pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Projected Operations - Under Current OPF", "Projected Operation Under Weather Risk Aware OPF", "Data Analytics"]
+pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Projected Operations - Under Current OPF", "Projected Operation Under - Weather Risk Aware OPF", "Data Analytics"]
 selection = st.sidebar.radio("Go to", pages)
 
 # Shared session state initialization
@@ -4968,8 +4968,8 @@ elif selection == "Projected Operations - Under Current OPF":
 # ────────────────────────────────────────────────────────────────────────────
 # Page 4 :  Weather‑Aware System
 # ────────────────────────────────────────────────────────────────────────────
-elif selection == "Projected Operation Under Weather Risk Aware OPF":
-    st.title("Projected Operation Under Weather Risk Aware OPF")
+elif selection == "Projected Operation Under - Weather Risk Aware OPF":
+    st.title("Projected Operation Under - Weather Risk Aware OPF")
 
     # --- sanity checks ------------------------------------------------------
     req_keys = ["network_data", "line_outage_data", "bau_results"]
