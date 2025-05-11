@@ -2646,7 +2646,7 @@ elif selection == "Data Analytics":
         diff_ld = [(b - w)*(45000/1e6) for b,w in zip(bau_ld, wa_ld)]
 
         fig2b = go.Figure()
-        generation‐cost difference region
+        # generation‐cost difference region
         fig2b.add_trace(go.Scatter(
             x=hours, y=lost_savings, fill="tozeroy", mode="none",
             name="Difference in Generation Cost",
