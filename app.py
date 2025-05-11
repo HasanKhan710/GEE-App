@@ -2784,18 +2784,45 @@ elif selection == "About the App and Developers":
         ### Key Terminologies
 
         1)	Weather Analysis Parameters: These are the three parameters set by grid operators.
-            •	Risk Tolerance (Low, Medium, and High)
-            •	Study Period (Weekly, Monthly)
-            •	Risk Score Threshold (6-18)
+            *	Risk Tolerance (Low, Medium, and High)
+            *	Study Period (Weekly, Monthly)
+            *	Risk Score Threshold (6-18)
         2)	Projected Operation Under Current OPF and Projected Operation Under Weather Risk Aware OPF has following options.
-            •  Contingency Mode Selection
+            *  Contingency Mode Selection
 
+        Risk Tolerance
+        a.	Low 
+        * In the Low option, the following weather conditions are considered as thresholds beyond which the weather conditions would cause increased vulnerability to that specific region and a threat to electric network. The threshold values are:                                                                   Temperature > 35°C, Precipitation > 50 mm, Wind > 10 m/s.
+        
+        b.	Medium
+        * In the Medium option, the following weather conditions are considered as thresholds beyond which the weather conditions would cause increased vulnerability to that specific region and a threat to electric network. The threshold values are: Temperature > 38°C, Precipitation > 100 mm, Wind > 15 m/s.
+        
+        c.	High 
+        * In the High option, the following weather conditions are considered as thresholds beyond which the weather conditions would cause increased vulnerability to that specific region and a threat to electric network. The threshold values are: Temperature > 41°C, Precipitation > 150 mm, Wind > 20 m/s.
+        
+        We can also say that these parameters would be based on how resilient an input network is. With Low means the network is least resilient and high means that network is strong against the extreme weather events.
 
+        Study Period
+        a.	Weekly: Under this option the tool will use weekly weather information (weekly aggregated data) for the historic weather analysis.
+        b.	Monthly: Under this option the tool will use monthly weather information (monthly aggregated data) for the historic weather analysis.
+
+        Risk Score Threshold
+        Risk Score can be chosen on a scale of 6-18 which is important for post weather data analysis. Using our novel Risk scoring Algorithm, when the risk scores are generated for each transmission lines for day ahead, this parameter decides which lines would fail on which projected hour during upcoming extreme weather event.
+
+        Contingency Mode Selection:
+        
+        The Contingency Mode parameter allows the user to define the operational scope of the system’s vulnerability simulation by selecting between two distinct failure modeling strategies. This choice directly impacts the number of lines that would be down after risk scores have been computed for all transmission lines.
+        
+        * Capped Contingency Mode: This mode evaluates system stability under a constrained failure scenario, assuming that only 20% of the at-risk transmission lines (as identified by the risk score threshold) of the total lines will fail. Any additional forecasted failures beyond this cap are deprioritized, reflecting conservative grid planning under limited disruption assumptions.
+        
+        * Maximum Contingency Mode: In contrast, this mode simulates a worst-case scenario by assuming that all transmission lines flagged as high risk will fail. It supports comprehensive stress-testing of the network, providing insights into cascading failure risks, load redistribution behavior, and potential stability violations under extreme weather-induced conditions
+
+         ---
+         
         ### Key Features
-        * **Google Earth Engine Integration** for live climate‑risk scoring  
-        * **Pandapower OPF / PF** with automated load‑shedding heuristics  
-        * **GEE and Folium‑based maps** with custom legends for line‑loading & outages  
-        * **Plotly analytics dashboard** for post‑simulation insights
+        * **Google Earth Engine Integration** is utilized for having rich historic weather data as well as forecasted weather data. 
+        * **Pandapower** is utilized for performing Optimal Power Flow (OPF) Analysis for finding optimized generation dispatch and calculation of lost load. 
+        * **•	GEE, Folium based maps and Plotly analytics** are used for hourly visualization in both scenarios and interactive plots in comparative analysis.
 
         ---
 
@@ -2810,11 +2837,14 @@ elif selection == "About the App and Developers":
         ---
 
         ### Data Sources & Methodology
-        * ERA‑5 / ERA‑5‑Land reanalysis & NOAA GFS forecasts  
-        * IEEE test‑case network parameters  
-        * Cost curves approximated in PKR   
 
-        For details, please refer to the thesis PDF or the code comments.
+        This tool has utilized Google Earth Engine (GEE) which is a cloud-based platform designed for large scale analysis of geospatial data. Its three data sets have been utilized in this tool
+        
+        * ERA‑5 The following dataset is utilized for historic weather analysis. [Link](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_DAILY) 
+        
+        * ERA 5 Land reanalysis: The following dataset is utilized for historic weather analysis. [Link](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_MONTHLY)
+
+        * NOAA GFS forecasts: The following dataset is utilized to get hourly weather forecast. [Link](https://developers.google.com/earth-engine/datasets/catalog/NOAA_GFS0P25)
 
         ---
 
@@ -2826,7 +2856,11 @@ elif selection == "About the App and Developers":
         * **Syed Muhammad Ammar Ali Jaffri** – BSc Electrical Engineering, Habib University  
           * ✉️ ammarjaffri6515@gmail.com&nbsp;&nbsp;|&nbsp;&nbsp;[LinkedIn](https://www.linkedin.com/in/ammarjaffri/) 
 
-        _We welcome feedback, pull‑requests and collaboration enquiries._
+        ### Faculty Supervisor  
+        * **Muhammad Umer Tariq** – Assistant Professor, Electrical and Computer Engineering at Habib University  
+        * ✉️ umer.tariq@sse.habib.edu.pk  
+
+        _We welcome feedback, and collaboration enquiries._
         """,
         unsafe_allow_html=True
     )
