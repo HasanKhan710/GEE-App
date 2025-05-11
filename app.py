@@ -2743,8 +2743,8 @@ elif selection == "Data Analytics":
         wa   = [h[idx] for h in st.session_state.weather_aware_results["gen_per_hour"]]
         fig5 = go.Figure()
         fig5.add_bar(x=hours, y=orig, name="Planned")
-        fig5.add_bar(x=hours, y=bau,  name="BAU")
-        fig5.add_bar(x=hours, y=wa,   name="WA")
+        fig5.add_bar(x=hours, y=bau,  name="Projected Operation - Under Current OPF")
+        fig5.add_bar(x=hours, y=wa,   name="Projected Operation - Under Weather Risk Aware OPF")
         fig5.update_layout(barmode="group", title=f"Dispatch @ Gen {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
         st.plotly_chart(fig5, use_container_width=True)
 
