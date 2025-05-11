@@ -655,7 +655,7 @@ elif selection == "Weather Risk Visualisation Using GEE":
     else:
         # Button to process and show results
         if st.button("Process Weather Risk Data"):
-            with st.spinner("Processing weather risk data..."):
+            with st.spinner("Processing weather risk data (Estimated Time 5-15 minutes)..."):
                 try:
                     # Initialize Earth Engine if not already done
                     try:
