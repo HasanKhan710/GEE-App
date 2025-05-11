@@ -2775,7 +2775,7 @@ elif selection == "About the App and Developers":
         
         ---
 
-        ### Want to lear about our Web App?  
+        ### Want to learn more about our Web App?  
         * 📄 **Full Research Thesis** – [Google Drive (PDF)](https://drive.google.com/drive/folders/1mzGOuPhHn2UryrB2q5K4AZH2bPutvNhF?usp=drive_link)  
         * ▶️ **Video Walk‑Through / Tutorial** – [YouTube](https://youtu.be/your-tutorial-video)  
 
