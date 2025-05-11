@@ -1999,7 +1999,7 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
         wa_res   = st.session_state.weather_aware_results
         bau_cost = st.session_state.bau_results["business_as_usual_cost"]
 
-        st.subheader("Day‑End Summary (Weather‑Aware)")
+        st.subheader("Day‑End Summary (Weather‑Risk Aware OPF)")
 
         # load‑shedding per bus --------------------------------------------
         shed_tbl = []
@@ -2017,9 +2017,9 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
         # hourly gen cost ---------------------------------------------------
         cost_tbl = pd.DataFrame({
             "Hour"                      : list(range(num_hours)),
-            "Weather‑Aware Cost (PKR)"  : [round(c,2) for c in wa_res["cost"]],
-            "BAU Cost (PKR)"            : [round(c,2) for c in bau_cost],
-            "Δ Cost (WA – BAU)"         : [round(w-b,2) for w,b in zip(wa_res["cost"], bau_cost)],
+            "Weather Risk Aware OPF Cost (PKR)"  : [round(c,2) for c in wa_res["cost"]],
+            "Under Current OPF Cost (PKR)"            : [round(c,2) for c in bau_cost],
+            "Δ Cost (WA – Current OPF)"         : [round(w-b,2) for w,b in zip(wa_res["cost"], bau_cost)],
         })
         st.write("### Hourly Generation Cost Comparison")
         st.dataframe(cost_tbl, use_container_width=True)
@@ -2031,7 +2031,7 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
             st.session_state.wa_vis_hour = None
 
         hr_label = st.selectbox(
-            "Select Hour to Visualize (Weather‑Aware)",
+            "Select Hour to Visualize (Weather‑Risk Aware)",
             [f"Hour {i}" for i in range(num_hours)]
         )
         want_hr  = int(hr_label.split()[-1])
