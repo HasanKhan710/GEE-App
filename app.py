@@ -2036,7 +2036,7 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
         )
         want_hr  = int(hr_label.split()[-1])
 
-        if st.button("Generate WA Visualization"):
+        if st.button("Generate Weather Aware Visualization"):
             st.session_state.wa_vis_hour = want_hr
 
         if st.session_state.wa_vis_hour is not None:
