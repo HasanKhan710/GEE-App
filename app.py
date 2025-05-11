@@ -2764,11 +2764,11 @@ elif selection == "About the App and Developers":
         This web application demonstrates an **end‑to‑end decision‑support
         workflow** for power‑system planners and operators:
 
-        1. **Network Initialization** – ingest IEEE‑style Excel parameters and visualise the grid.  
-        2. **Weather‑Risk Visualisation** – query Google Earth Engine in real‑time to map historic occurrences and *day‑ahead* extremes of temperature, precipitation and wind.  
-        3. **Projected Operation - Under Current OPF** – run a baseline OPF / PF for 24 h under normal operating assumptions.  
-        4. **Projected Operation - Under Weather Risk Aware OPF** – re‑run the 24‑hour horizon while proactively tripping lines/transformers expected to be weather‑impacted, then apply an OPF with increased generator setpoints to mitigate load shedding.  
-        5. **Data Analytics** – interactive plots to compare costs, load‑shedding and line‑load evolution between BAU and Weather‑Aware modes.
+        1. **Network Initialization** – input IEEE standard Excel parameters and visualise the grid.  
+        2. **Weather‑Risk Visualisation** – use Google Earth Engine in real‑time to map historic occurrences and *day‑ahead* extremes of temperature, precipitation and wind.  
+        3. **Projected Operation - Under Current OPF** – run a baseline OPF for 24 h under normal operating assumptions.  
+        4. **Projected Operation - Under Weather Risk Aware OPF** – run the weather aware OPF for day-ahead while proactively tripping lines expected to be weather‑impacted, by increasing generator setpoints to mitigate load shedding.  
+        5. **Data Analytics** – interactive comparative plots to compare costs, load‑shedding and line‑load evolution between current OPF and weather aware OPF modes.
 
         The goal is to **quantify the technical and economic benefit** of risk‑aware
         dispatch decisions—highlighting *potential lost revenue* and critical load
@@ -2802,8 +2802,8 @@ elif selection == "About the App and Developers":
 
         ### Data Sources & Methodology
         * ERA‑5 / ERA‑5‑Land reanalysis & NOAA GFS forecasts  
-        * IEEE test‑case‑style network parameters  
-        * Cost curves approximated in PKR (can be edited in the spreadsheet)  
+        * IEEE test‑case network parameters  
+        * Cost curves approximated in PKR   
 
         For details, please refer to the thesis PDF or the code comments.
 
