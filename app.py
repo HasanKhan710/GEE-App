@@ -2791,6 +2791,7 @@ elif selection == "About the App and Developers":
             *  Contingency Mode Selection
 
         Risk Tolerance
+        
         a.	Low 
         * In the Low option, the following weather conditions are considered as thresholds beyond which the weather conditions would cause increased vulnerability to that specific region and a threat to electric network. The threshold values are:                                                                   Temperature > 35°C, Precipitation > 50 mm, Wind > 10 m/s.
         
@@ -2803,10 +2804,13 @@ elif selection == "About the App and Developers":
         We can also say that these parameters would be based on how resilient an input network is. With Low means the network is least resilient and high means that network is strong against the extreme weather events.
 
         Study Period
+        
         a.	Weekly: Under this option the tool will use weekly weather information (weekly aggregated data) for the historic weather analysis.
+        
         b.	Monthly: Under this option the tool will use monthly weather information (monthly aggregated data) for the historic weather analysis.
 
         Risk Score Threshold
+        
         Risk Score can be chosen on a scale of 6-18 which is important for post weather data analysis. Using our novel Risk scoring Algorithm, when the risk scores are generated for each transmission lines for day ahead, this parameter decides which lines would fail on which projected hour during upcoming extreme weather event.
 
         Contingency Mode Selection:
@@ -2822,7 +2826,7 @@ elif selection == "About the App and Developers":
         ### Key Features
         * **Google Earth Engine Integration** is utilized for having rich historic weather data as well as forecasted weather data. 
         * **Pandapower** is utilized for performing Optimal Power Flow (OPF) Analysis for finding optimized generation dispatch and calculation of lost load. 
-        * **•	GEE, Folium based maps and Plotly analytics** are used for hourly visualization in both scenarios and interactive plots in comparative analysis.
+        * **GEE, Folium based maps and Plotly analytics** are used for hourly visualization in both scenarios and interactive plots in comparative analysis.
 
         ---
 
@@ -2840,11 +2844,11 @@ elif selection == "About the App and Developers":
 
         This tool has utilized Google Earth Engine (GEE) which is a cloud-based platform designed for large scale analysis of geospatial data. Its three data sets have been utilized in this tool
         
-        * ERA‑5 The following dataset is utilized for historic weather analysis. [Link](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_DAILY) 
+        * ERA‑5 The following dataset is utilized for historic weather analysis [Link](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_DAILY).
         
-        * ERA 5 Land reanalysis: The following dataset is utilized for historic weather analysis. [Link](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_MONTHLY)
+        * ERA 5 Land reanalysis: The following dataset is utilized for historic weather analysis [Link](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_MONTHLY).
 
-        * NOAA GFS forecasts: The following dataset is utilized to get hourly weather forecast. [Link](https://developers.google.com/earth-engine/datasets/catalog/NOAA_GFS0P25)
+        * NOAA GFS forecasts: The following dataset is utilized to get hourly weather forecast [Link](https://developers.google.com/earth-engine/datasets/catalog/NOAA_GFS0P25).
 
         ---
 
@@ -2858,7 +2862,7 @@ elif selection == "About the App and Developers":
 
         ### Faculty Supervisor  
         * **Muhammad Umer Tariq** – Assistant Professor, Electrical and Computer Engineering at Habib University  
-        * ✉️ umer.tariq@sse.habib.edu.pk  
+          * ✉️ umer.tariq@sse.habib.edu.pk  
 
         _We welcome feedback, and collaboration enquiries._
         """,
