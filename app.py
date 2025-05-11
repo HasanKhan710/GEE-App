@@ -2790,30 +2790,27 @@ elif selection == "About the App and Developers":
         2)	Projected Operation Under Current OPF and Projected Operation Under Weather Risk Aware OPF has following options.
             *  Contingency Mode Selection
 
-        Risk Tolerance
+        # Risk Tolerance
         
-        a.	Low 
-        * In the Low option, the following weather conditions are considered as thresholds beyond which the weather conditions would cause increased vulnerability to that specific region and a threat to electric network. The threshold values are:                                                                   Temperature > 35°C, Precipitation > 50 mm, Wind > 10 m/s.
+        * Low: In the Low option, the following weather conditions are considered as thresholds beyond which the weather conditions would cause increased vulnerability to that specific region and a threat to electric network. The threshold values are:                                                                   Temperature > 35°C, Precipitation > 50 mm, Wind > 10 m/s.
         
-        b.	Medium
-        * In the Medium option, the following weather conditions are considered as thresholds beyond which the weather conditions would cause increased vulnerability to that specific region and a threat to electric network. The threshold values are: Temperature > 38°C, Precipitation > 100 mm, Wind > 15 m/s.
+        * Medium: In the Medium option, the following weather conditions are considered as thresholds beyond which the weather conditions would cause increased vulnerability to that specific region and a threat to electric network. The threshold values are: Temperature > 38°C, Precipitation > 100 mm, Wind > 15 m/s.
         
-        c.	High 
-        * In the High option, the following weather conditions are considered as thresholds beyond which the weather conditions would cause increased vulnerability to that specific region and a threat to electric network. The threshold values are: Temperature > 41°C, Precipitation > 150 mm, Wind > 20 m/s.
+        * High: In the High option, the following weather conditions are considered as thresholds beyond which the weather conditions would cause increased vulnerability to that specific region and a threat to electric network. The threshold values are: Temperature > 41°C, Precipitation > 150 mm, Wind > 20 m/s.
         
         We can also say that these parameters would be based on how resilient an input network is. With Low means the network is least resilient and high means that network is strong against the extreme weather events.
 
-        Study Period
+        # Study Period
         
-        a.	Weekly: Under this option the tool will use weekly weather information (weekly aggregated data) for the historic weather analysis.
+        * Weekly: Under this option the tool will use weekly weather information (weekly aggregated data) for the historic weather analysis.
         
-        b.	Monthly: Under this option the tool will use monthly weather information (monthly aggregated data) for the historic weather analysis.
+        * Monthly: Under this option the tool will use monthly weather information (monthly aggregated data) for the historic weather analysis.
 
-        Risk Score Threshold
+        # Risk Score Threshold
         
-        Risk Score can be chosen on a scale of 6-18 which is important for post weather data analysis. Using our novel Risk scoring Algorithm, when the risk scores are generated for each transmission lines for day ahead, this parameter decides which lines would fail on which projected hour during upcoming extreme weather event.
+        * Risk Score can be chosen on a scale of 6-18 which is important for post weather data analysis. Using our novel Risk scoring Algorithm, when the risk scores are generated for each transmission lines for day ahead, this parameter decides which lines would fail on which projected hour during upcoming extreme weather event.
 
-        Contingency Mode Selection:
+        # Contingency Mode Selection:
         
         The Contingency Mode parameter allows the user to define the operational scope of the system’s vulnerability simulation by selecting between two distinct failure modeling strategies. This choice directly impacts the number of lines that would be down after risk scores have been computed for all transmission lines.
         
