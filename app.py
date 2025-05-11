@@ -2837,7 +2837,7 @@ elif selection == "About the App and Developers":
 
         ---
 
-        ### Data Sources & Methodology
+        ### Data Sources 
 
         This tool has utilized Google Earth Engine (GEE) which is a cloud-based platform designed for large scale analysis of geospatial data. Its three data sets have been utilized in this tool
         
