@@ -2767,7 +2767,7 @@ elif selection == "About the App and Developers":
         1. **Network Initialization** – input IEEE standard Excel parameters and visualise the grid.  
         2. **Weather‑Risk Visualisation** – use Google Earth Engine in real‑time to map historic occurrences and *day‑ahead* extremes of temperature, precipitation and wind.  
         3. **Projected Operation - Under Current OPF** – run a baseline OPF for 24 h under normal operating assumptions.  
-        4. **Projected Operation - Under Weather Risk Aware OPF** – run the weather aware OPF for day-ahead while proactively tripping lines expected to be weather‑impacted, by increasing generator setpoints to mitigate load shedding.  
+        4. **Projected Operation - Under Weather Risk Aware OPF** – run the weather aware OPF for day-ahead while proactively increasing generator setpoints to mitigate load shedding due to tripping of lines expected to be weather‑impacted the next day.  
         5. **Data Analytics** – interactive comparative plots to compare costs, load‑shedding and line‑load evolution between current OPF and weather aware OPF modes.
 
         The goal is to **quantify the technical and economic benefit** of risk‑aware
