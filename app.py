@@ -2756,31 +2756,40 @@ elif selection == "Data Analytics":
 # Page 0 :  About the App
 # ────────────────────────────────────────────────────────────────────────────
 elif selection == "About the App and Developers":
-    st.title("Continuous Monitoring of Climate Risks to Electricity Grids")
+    st.title("Continuous Monitoring of Climate Risks to Electricity Grids using Google Earth Engine")
 
     st.markdown(
         """
         ### Overview  
-        This web application demonstrates an **end‑to‑end decision‑support
-        workflow** for power‑system planners and operators:
+        This web application gives an end to end decision support workflow for Grid Operators. It contains following five pages whose description is as follows:
 
-        1. **Network Initialization** – input IEEE standard Excel parameters and visualise the grid.  
-        2. **Weather‑Risk Visualisation** – use Google Earth Engine in real‑time to map historic occurrences and *day‑ahead* extremes of temperature, precipitation and wind.  
-        3. **Projected Operation - Under Current OPF** – run a baseline OPF for 24 h under normal operating assumptions.  
-        4. **Projected Operation - Under Weather Risk Aware OPF** – run the weather aware OPF for day-ahead while proactively increasing generator setpoints to mitigate load shedding due to tripping of lines expected to be weather‑impacted the next day.  
-        5. **Data Analytics** – interactive comparative plots to compare costs, load‑shedding and line‑load evolution between current OPF and weather aware OPF modes.
+        1. **Network Initialization** – This page ask user to input the Excel File containing Transmission Network Information.  
+        2. **Weather‑Risk Visualisation** – This page ask user to set the Weather Analysis Parameters (see below for their details) and then utilize Google Earth Engine to analyze historic and forecasted weather data for day ahead.  
+        3. **Projected Operation - Under Current OPF** – This page ask user to select contingency mode (see below for its details) and then yield 24 hourly electric grid operations along with the visualization on map for day ahead. This mode represents the usual operations of electric utilities where the generation does not account for historic weather data and projected extreme weather events that would cause transmissions lines to fail.  
+        4. **Projected Operation - Under Weather Risk Aware OPF** – This page ask user to select contingency mode (see below for its details) and then yield 24 hourly operations along with the visualization on map for day ahead. This mode shows the vitality of our tool when it helps utilities to prepare the generation schedule for day ahead while incorporating historic and forecasted weather data and extreme weather risks to the electric grid. 
+        5. **Data Analytics** – This page comprises of interactive comparative plots to show comparative analysis between the Projected Operations Under Current OPF vs Weather Risk Aware OPF in terms of cost, amount of load shedding, line loadings, estimated revenue loss under the “Projected Operation Under Current OPF” scenario and the hourly generation and load values. 
+        
+        The goal is to **quantify the technical and economic benefit** of risk aware dispatch decisions—highlighting potential lost revenue and critical load not served under various contingencies.
 
-        The goal is to **quantify the technical and economic benefit** of risk‑aware
-        dispatch decisions—highlighting *potential lost revenue* and critical load
-        not served under various contingencies.
-
+        **While an analysis is running, please remain on that page until it finishes. Once the process is complete, you’re free to navigate to any page and explore all options.**
+        
         ---
 
-        ### Quick Links  
+        ### Want to lear about our Web App?  
         * 📄 **Full Research Thesis** – [Google Drive (PDF)](https://drive.google.com/drive/folders/1mzGOuPhHn2UryrB2q5K4AZH2bPutvNhF?usp=drive_link)  
         * ▶️ **Video Walk‑Through / Tutorial** – [YouTube](https://youtu.be/your-tutorial-video)  
 
         ---
+
+        ### Key Terminologies
+
+        1)	Weather Analysis Parameters: These are the three parameters set by grid operators.
+            •	Risk Tolerance (Low, Medium, and High)
+            •	Study Period (Weekly, Monthly)
+            •	Risk Score Threshold (6-18)
+        2)	Projected Operation Under Current OPF and Projected Operation Under Weather Risk Aware OPF has following options.
+            •  Contingency Mode Selection
+
 
         ### Key Features
         * **Google Earth Engine Integration** for live climate‑risk scoring  
