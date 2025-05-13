@@ -48,7 +48,7 @@ initialize_ee()
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
-pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using GEE", "Projected Operation - Under Current OPF", "Projected Operation - Under Weather Risk Aware OPF", "Data Analytics"]
+pages = ["About the App and Developers", "Network Initialization", "Weather Risk Visualisation Using Google Earth Engine", "Projected Operation - Under Current OPF", "Projected Operation - Under Weather Risk Aware OPF", "Data Analytics"]
 selection = st.sidebar.radio("Go to", pages)
 
 # Shared session state initialization
@@ -397,7 +397,7 @@ if selection == "Network Initialization":
     # uploaded_file = st.file_uploader("Upload your network Excel file (e.g., Final_IEEE_9Bus_Parameters_only.xlsx)", type=["xlsx"], key="file_uploader")
 
     st.markdown(
-    "[Download the sample IEEE‑9 or 14 bus network parameters](https://drive.google.com/drive/folders/1oT10dY6hZiM0q3AYiFzEqe_GQ5vA-eEa?usp=sharing) "
+    "Donot have an Excel File in our specified format? [Download the sample IEEE‑9 or 14 bus network parameters](https://drive.google.com/drive/folders/1oT10dY6hZiM0q3AYiFzEqe_GQ5vA-eEa?usp=sharing) "
     "from Google Drive.",
     unsafe_allow_html=True,
     )
@@ -615,7 +615,7 @@ if selection == "Network Initialization":
         st.info("Please upload an Excel file to proceed.")
         
 # Page 2: Weather Risk Visualisation Using GEE
-elif selection == "Weather Risk Visualisation Using GEE":
+elif selection == "Weather Risk Visualisation Using Google Earth Engine":
     st.title("Weather Risk Visualisation Using GEE")
 
     # Create columns for dropdown menus
@@ -2730,23 +2730,23 @@ elif selection == "Data Analytics":
             st.warning(f"No profile data for bus {b}.")
 
 
-    # # ── PLOT 5: Generator Dispatch @ Selected Generator ────────────────────
-    gen = st.selectbox("Select Generator Bus", valid_gens, key="gen_to_plot")
-    if st.button("5) Show Generator Dispatch Comparison"):
-        st.session_state.show_gen = True
-    if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
-        b = st.session_state.gen_to_plot
-        col = f"p_mw_PV{b}"
-        orig = df_gp[col].tolist()
-        idx  = df_gen.reset_index().index[df_gen["bus"]==b][0]
-        bau  = [h[idx] for h in st.session_state.bau_results["gen_per_hour_bau"]]
-        wa   = [h[idx] for h in st.session_state.weather_aware_results["gen_per_hour"]]
-        fig5 = go.Figure()
-        fig5.add_bar(x=hours, y=orig, name="Planned")
-        fig5.add_bar(x=hours, y=bau,  name="Projected Operation - Under Current OPF")
-        fig5.add_bar(x=hours, y=wa,   name="Projected Operation - Under Weather Risk Aware OPF")
-        fig5.update_layout(barmode="group", title=f"Dispatch @ Gen {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
-        st.plotly_chart(fig5, use_container_width=True)
+    # # # ── PLOT 5: Generator Dispatch @ Selected Generator ────────────────────
+    # gen = st.selectbox("Select Generator Bus", valid_gens, key="gen_to_plot")
+    # if st.button("5) Show Generator Dispatch Comparison"):
+    #     st.session_state.show_gen = True
+    # if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
+    #     b = st.session_state.gen_to_plot
+    #     col = f"p_mw_PV{b}"
+    #     orig = df_gp[col].tolist()
+    #     idx  = df_gen.reset_index().index[df_gen["bus"]==b][0]
+    #     bau  = [h[idx] for h in st.session_state.bau_results["gen_per_hour_bau"]]
+    #     wa   = [h[idx] for h in st.session_state.weather_aware_results["gen_per_hour"]]
+    #     fig5 = go.Figure()
+    #     fig5.add_bar(x=hours, y=orig, name="Planned")
+    #     fig5.add_bar(x=hours, y=bau,  name="Projected Operation - Under Current OPF")
+    #     fig5.add_bar(x=hours, y=wa,   name="Projected Operation - Under Weather Risk Aware OPF")
+    #     fig5.update_layout(barmode="group", title=f"Dispatch @ Gen {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
+    #     st.plotly_chart(fig5, use_container_width=True)
 
     # st.markdown("---")
 
