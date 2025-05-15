@@ -1436,10 +1436,10 @@ elif selection == "Projected Operation - Under Current OPF":
                                                 business_as_usuall_cost[hour] = net.res_cost if net.OPF_converged else business_as_usuall_cost[hour]                                         except:
                                                 pp.runpp(net)
                                             except:
-                                                pp.runpp(net)
-                                                pass
-                                            except:
-                                                pp.runpp(net)
+                                                try:
+                                                    pp.runpp(net)
+                                                except:
+                                                    pass
                                         except:
                                             business_as_usual_cost[hour] = 0
                                             overloads.clear()
