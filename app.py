@@ -1438,6 +1438,8 @@ elif selection == "Projected Operation - Under Current OPF":
                                             except:
                                                 pp.runpp(net)
                                                 pass
+                                            except:
+                                                pp.runpp(net)
                                         except:
                                             business_as_usual_cost[hour] = 0
                                             overloads.clear()
