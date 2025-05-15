@@ -1433,9 +1433,9 @@ elif selection == "Projected Operation - Under Current OPF":
                                         try:
                                             try:
                                                 pp.runopp(net)
-                                                business_as_usuall_cost[hour] = net.res_cost if net.OPF_converged else business_as_usuall_cost[hour]
-                                                # if net.OPF_converged:
-                                                #     business_as_usual_cost[hour] = net.res_cost
+                                                # business_as_usuall_cost[hour] = net.res_cost if net.OPF_converged else business_as_usuall_cost[hour]
+                                                if net.OPF_converged:
+                                                    business_as_usual_cost[hour] = net.res_cost
                                             except:
                                                 pp.runpp(net)
                                                 pass
