@@ -1435,6 +1435,9 @@ elif selection == "Projected Operation - Under Current OPF":
                                                 pp.runopp(net)
                                                 business_as_usuall_cost[hour] = net.res_cost                                             except:
                                                 pp.runpp(net)
+                                            except:
+                                                pp.runpp(net)
+                                                pass
                                         except:
                                             business_as_usual_cost[hour] = 0
                                             overloads.clear()
