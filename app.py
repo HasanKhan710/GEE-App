@@ -971,8 +971,8 @@ if selection == "Network Initialization":
             st.warning("Map could not be generated.")
 
     # --- Clear Results Button ---
-    # if st.session_state.show_results and st.button("Clear Results"):
-    if st.session_state.show_results:
+    if st.session_state.show_results and st.button("Clear Results"):
+    # if st.session_state.show_results:
         st.session_state.show_results = False
         st.session_state.network_data = None
         st.session_state.map_obj = None
