@@ -15,8 +15,9 @@ import geemap
 import numpy as np
 import math
 import traceback
+import plotly.graph_objects as go
 from shapely.geometry import LineString, Point
-
+import plotly.express as px
 
 # Set page configuration
 st.set_page_config(
@@ -94,92 +95,356 @@ def add_ee_layer(self, ee_object, vis_params, name):
 # Attach the method to folium.Map
 folium.Map.add_ee_layer = add_ee_layer
 
+# ---------------------------------------------------------------------
+# 1) Network INITIALISE  (was `Network_initialize` in Colab)
+# ----------------------------------------------------------
+def network_initialize(xls_file):
+    """
+    Re-creates a fresh pandapower network from the uploaded Excel *every* time
+    Page-3 (baseline OPF) or Page-4 (weather-aware OPF) is run, so that both
+    simulations start from the identical initial state.
 
-def transform_loading(a):
-    if a is None:
-        return a
-    is_single = False
-    if isinstance(a, (int, float)):
-        a = [a]
-        is_single = True
-    flag = True
-    for item in a:
-        if isinstance(item, (int, float)) and item >= 2.5:
-            flag = False
-    if flag:
-        a = [item * 100 if isinstance(item, (int, float)) else item for item in a]
-    return a[0] if is_single else a
+    Parameters
+    ----------
+    xls_file : BytesIO or str
+        The same object you get back from `st.file_uploader` (i.e. the upload
+        stream).  A local file path also works, so existing unit-tests keep
+        passing.
 
+    Returns
+    -------
+    tuple
+        [net, df_bus, df_slack, df_line, num_hours,
+         load_dynamic, gen_dynamic,
+         df_load_profile, df_gen_profile, *optional df_trafo*]
+    """
+
+    # --- 0. Fresh empty network
+    net = pp.create_empty_network()
+
+    # --- 1. Read all static sheets ------------------------------------------------
+    df_bus   = pd.read_excel(xls_file, sheet_name="Bus Parameters",      index_col=0)
+    df_load  = pd.read_excel(xls_file, sheet_name="Load Parameters",     index_col=0)
+    df_slack = pd.read_excel(xls_file, sheet_name="Generator Parameters",index_col=0)
+    df_line  = pd.read_excel(xls_file, sheet_name="Line Parameters",     index_col=0)
+    # df_gen_params = pd.read_excel(xls_file, sheet_name="Generator Parameters")
+
+
+    # --- 2. Build static elements -------------------------------------------------
+    for _, row in df_bus.iterrows():
+        pp.create_bus(net,
+                      name          = row["name"],
+                      vn_kv         = row["vn_kv"],
+                      zone          = row["zone"],
+                      in_service    = row["in_service"],
+                      max_vm_pu     = row["max_vm_pu"],
+                      min_vm_pu     = row["min_vm_pu"])
+
+    for _, row in df_load.iterrows():
+        pp.create_load(net,
+                       bus           = row["bus"],
+                       p_mw          = row["p_mw"],
+                       q_mvar        = row["q_mvar"],
+                       in_service    = row["in_service"])
+
+    for _, row in df_slack.iterrows():
+        if row["slack_weight"] == 1:
+            ext_idx = pp.create_ext_grid(net,
+                                         bus        = row["bus"],
+                                         vm_pu      = row["vm_pu"],
+                                         va_degree  = 0)
+            pp.create_poly_cost(net, element=ext_idx, et="ext_grid",
+                                cp0_eur_per_mw = row["cp0_pkr_per_mw"],
+                                cp1_eur_per_mw = row["cp1_pkr_per_mw"],
+                                cp2_eur_per_mw = row["cp2_pkr_per_mw"],
+                                cp0_eur_per_mvar = row["cp0_pkr_per_mvar"],
+                                cq1_eur_per_mvar = row["cq1_pkr_per_mvar"],
+                                cq2_eur_per_mvar = row["cq2_pkr_per_mvar"])
+        else:
+            gen_idx = pp.create_gen(net,
+                                    bus         = row["bus"],
+                                    p_mw        = row["p_mw"],
+                                    vm_pu       = row["vm_pu"],
+                                    min_q_mvar  = row["min_q_mvar"],
+                                    max_q_mvar  = row["max_q_mvar"],
+                                    scaling     = row["scaling"],
+                                    in_service  = row["in_service"],
+                                    slack_weight= row["slack_weight"],
+                                    controllable= row["controllable"],
+                                    max_p_mw    = row["max_p_mw"],
+                                    min_p_mw    = row["min_p_mw"])
+            pp.create_poly_cost(net, element=gen_idx, et="gen",
+                                cp0_eur_per_mw = row["cp0_pkr_per_mw"],
+                                cp1_eur_per_mw = row["cp1_pkr_per_mw"],
+                                cp2_eur_per_mw = row["cp2_pkr_per_mw"],
+                                cp0_eur_per_mvar = row["cp0_pkr_per_mvar"],
+                                cq1_eur_per_mvar = row["cq1_pkr_per_mvar"],
+                                cq2_eur_per_mvar = row["cq2_pkr_per_mvar"])
+
+    for _, row in df_line.iterrows():
+        if pd.isna(row["parallel"]):
+            continue
+        geodata = ast.literal_eval(row["geodata"]) if isinstance(row["geodata"], str) else row["geodata"]
+        pp.create_line_from_parameters(net,
+                                       from_bus             = row["from_bus"],
+                                       to_bus               = row["to_bus"],
+                                       length_km            = row["length_km"],
+                                       r_ohm_per_km         = row["r_ohm_per_km"],
+                                       x_ohm_per_km         = row["x_ohm_per_km"],
+                                       c_nf_per_km          = row["c_nf_per_km"],
+                                       max_i_ka             = row["max_i_ka"],
+                                       in_service           = row["in_service"],
+                                       max_loading_percent  = row["max_loading_percent"],
+                                       geodata              = geodata)
+
+    # --- 3. Optional transformers -------------------------------------------------
+    xls_obj = pd.ExcelFile(xls_file)
+    if "Transformer Parameters" in xls_obj.sheet_names:
+        df_trafo = pd.read_excel(xls_file, sheet_name="Transformer Parameters", index_col=0)
+        for _, row in df_trafo.iterrows():
+            pp.create_transformer_from_parameters(net,
+                 hv_bus    = row["hv_bus"],
+                 lv_bus    = row["lv_bus"],
+                 sn_mva    = row["sn_mva"],
+                 vn_hv_kv  = row["vn_hv_kv"],
+                 vn_lv_kv  = row["vn_lv_kv"],
+                 vk_percent= row["vk_percent"],
+                 vkr_percent=row["vkr_percent"],
+                 pfe_kw    = row["pfe_kw"],
+                 i0_percent= row["i0_percent"],
+                 in_service=row["in_service"],
+                 max_loading_percent=row["max_loading_percent"])
+
+    # --- 4. Dynamic-profile helpers ----------------------------------------------
+    df_load_profile = pd.read_excel(xls_file, sheet_name="Load Profile")
+    df_load_profile.columns = df_load_profile.columns.str.strip()
+
+    load_dynamic = {}
+    for col in df_load_profile.columns:
+        m = re.match(r"p_mw_bus_(\d+)", col)
+        if m:
+            bus  = int(m.group(1))
+            qcol = f"q_mvar_bus_{bus}"
+            if qcol in df_load_profile.columns:
+                load_dynamic[bus] = {"p": col, "q": qcol}
+
+    df_gen_profile = pd.read_excel(xls_file, sheet_name="Generator Profile")
+    df_gen_profile.columns = df_gen_profile.columns.str.strip()
+
+    gen_dynamic = {}
+    for col in df_gen_profile.columns:
+        if col.startswith("p_mw"):
+            nums = re.findall(r"\d+", col)
+            if nums:
+                gen_dynamic[int(nums[-1])] = col
+
+    num_hours = len(df_load_profile)
+
+    # --- 5. Return exactly what Colab did -----------------------------------------
+    if "Transformer Parameters" in xls_obj.sheet_names:
+        return (net, df_bus, df_slack, df_line,
+                num_hours, load_dynamic, gen_dynamic,
+                df_load_profile, df_gen_profile, df_trafo)
+
+    return (net, df_bus, df_slack, df_line,
+            num_hours, load_dynamic, gen_dynamic,
+            df_load_profile, df_gen_profile)
+# ---------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Colab-equivalent: rebuild + 24-h OPF loop on every call
+# ---------------------------------------------------------------------------
+def calculating_hourly_cost(xls_file):
+    """
+    Streamlit drop-in replacement for the Colab routine.
+
+    Parameters
+    ----------
+    xls_file : BytesIO | str
+        The file object returned by `st.file_uploader` *or* a filesystem path.
+
+    Returns
+    -------
+    list
+        Length == number of rows in “Load Profile”.
+        Each element is net.res_cost (DataFrame) when OPF succeeded,
+        otherwise the integer 0.
+    """
+    # 0) Prep
+    xls = pd.ExcelFile(xls_file)
+    hourly_cost_list = []
+    net = pp.create_empty_network()
+
+    # 1) Static sheets ----------------------------------------------------------
+    df_bus   = pd.read_excel(xls_file, sheet_name="Bus Parameters",      index_col=0)
+    df_load  = pd.read_excel(xls_file, sheet_name="Load Parameters",     index_col=0)
+    df_slack = pd.read_excel(xls_file, sheet_name="Generator Parameters",index_col=0)
+    df_line  = pd.read_excel(xls_file, sheet_name="Line Parameters",     index_col=0)
+
+    # 2) Create buses -----------------------------------------------------------
+    for _, row in df_bus.iterrows():
+        pp.create_bus(net,
+                      name        = row["name"],
+                      vn_kv       = row["vn_kv"],
+                      zone        = row["zone"],
+                      in_service  = row["in_service"],
+                      max_vm_pu   = row["max_vm_pu"],
+                      min_vm_pu   = row["min_vm_pu"])
+
+    # 3) Create loads -----------------------------------------------------------
+    for _, row in df_load.iterrows():
+        pp.create_load(net,
+                       bus        = row["bus"],
+                       p_mw       = row["p_mw"],
+                       q_mvar     = row["q_mvar"],
+                       in_service = row["in_service"])
+
+    # 4) Create generators / ext-grid ------------------------------------------
+    for _, row in df_slack.iterrows():
+        if row["slack_weight"] == 1:
+            ext_idx = pp.create_ext_grid(net,
+                                         bus       = row["bus"],
+                                         vm_pu     = row["vm_pu"],
+                                         va_degree = 0)
+            pp.create_poly_cost(net, element=ext_idx, et="ext_grid",
+                                cp0_eur_per_mw   = row["cp0_pkr_per_mw"],
+                                cp1_eur_per_mw   = row["cp1_pkr_per_mw"],
+                                cp2_eur_per_mw   = row["cp2_pkr_per_mw"],
+                                cp0_eur_per_mvar = row["cp0_pkr_per_mvar"],
+                                cq1_eur_per_mvar = row["cq1_pkr_per_mvar"],
+                                cq2_eur_per_mvar = row["cq2_pkr_per_mvar"])
+        else:
+            gen_idx = pp.create_gen(net,
+                                    bus          = row["bus"],
+                                    p_mw         = row["p_mw"],     # overwritten hourly
+                                    vm_pu        = row["vm_pu"],
+                                    min_q_mvar   = row["min_q_mvar"],
+                                    max_q_mvar   = row["max_q_mvar"],
+                                    scaling      = row["scaling"],
+                                    in_service   = row["in_service"],
+                                    slack_weight = row["slack_weight"],
+                                    controllable = row["controllable"],
+                                    max_p_mw     = row["max_p_mw"],
+                                    min_p_mw     = row["min_p_mw"])
+            pp.create_poly_cost(net, element=gen_idx, et="gen",
+                                cp0_eur_per_mw   = row["cp0_pkr_per_mw"],
+                                cp1_eur_per_mw   = row["cp1_pkr_per_mw"],
+                                cp2_eur_per_mw   = row["cp2_pkr_per_mw"],
+                                cp0_eur_per_mvar = row["cp0_pkr_per_mvar"],
+                                cq1_eur_per_mvar = row["cq1_pkr_per_mvar"],
+                                cq2_eur_per_mvar = row["cq2_pkr_per_mvar"])
+
+    # 5) Create lines -----------------------------------------------------------
+    for _, row in df_line.iterrows():
+        if pd.isna(row["parallel"]):
+            continue
+        geodata = ast.literal_eval(row["geodata"]) if isinstance(row["geodata"], str) else row["geodata"]
+        pp.create_line_from_parameters(net,
+                                       from_bus            = row["from_bus"],
+                                       to_bus              = row["to_bus"],
+                                       length_km           = row["length_km"],
+                                       r_ohm_per_km        = row["r_ohm_per_km"],
+                                       x_ohm_per_km        = row["x_ohm_per_km"],
+                                       c_nf_per_km         = row["c_nf_per_km"],
+                                       max_i_ka            = row["max_i_ka"],
+                                       in_service          = row["in_service"],
+                                       max_loading_percent = row["max_loading_percent"],
+                                       geodata             = geodata)
+
+    # 6) Optional transformers ---------------------------------------------------
+    if "Transformer Parameters" in xls.sheet_names:
+        df_trafo = pd.read_excel(xls_file, sheet_name="Transformer Parameters", index_col=0)
+        for _, row in df_trafo.iterrows():
+            pp.create_transformer_from_parameters(net,
+                 hv_bus             = row["hv_bus"],
+                 lv_bus             = row["lv_bus"],
+                 sn_mva             = row["sn_mva"],
+                 vn_hv_kv           = row["vn_hv_kv"],
+                 vn_lv_kv           = row["vn_lv_kv"],
+                 vk_percent         = row["vk_percent"],
+                 vkr_percent        = row["vkr_percent"],
+                 pfe_kw             = row["pfe_kw"],
+                 i0_percent         = row["i0_percent"],
+                 in_service         = row["in_service"],
+                 max_loading_percent= row["max_loading_percent"])
+
+    # 7) Dynamic-profile helpers -------------------------------------------------
+    df_load_profile = pd.read_excel(xls_file, sheet_name="Load Profile")
+    df_load_profile.columns = df_load_profile.columns.str.strip()
+
+    load_dynamic = {}
+    for col in df_load_profile.columns:
+        m = re.match(r"p_mw_bus_(\d+)", col)
+        if m:
+            bus   = int(m.group(1))
+            q_col = f"q_mvar_bus_{bus}"
+            if q_col in df_load_profile.columns:
+                load_dynamic[bus] = {"p": col, "q": q_col}
+
+    df_gen_profile = pd.read_excel(xls_file, sheet_name="Generator Profile")
+    df_gen_profile.columns = df_gen_profile.columns.str.strip()
+
+    gen_dynamic = {}
+    for col in df_gen_profile.columns:
+        if col.startswith("p_mw"):
+            nums = re.findall(r"\d+", col)
+            if nums:
+                gen_dynamic[int(nums[-1])] = col
+
+    num_hours = len(df_load_profile)
+
+    # 8) Hour-by-hour OPF loop ---------------------------------------------------
+    for hour in range(num_hours):
+
+        # 8.1 update loads
+        for bus_id, cols in load_dynamic.items():
+            p_val = float(df_load_profile.at[hour, cols["p"]])
+            q_val = float(df_load_profile.at[hour, cols["q"]])
+            mask  = net.load.bus == bus_id
+            net.load.loc[mask, "p_mw"]  = p_val
+            net.load.loc[mask, "q_mvar"] = q_val
+
+        # 8.2 update gens / ext grid
+        for bus_id, col in gen_dynamic.items():
+            p_val = float(df_gen_profile.at[hour, col])
+            if bus_id in net.ext_grid.bus.values:
+                net.ext_grid.loc[net.ext_grid.bus == bus_id, "p_mw"] = p_val
+            else:
+                net.gen.loc[net.gen.bus == bus_id, "p_mw"] = p_val
+
+        # 8.3 run OPF
+        try:
+            pp.runopp(net)
+            hourly_cost_list.append(net.res_cost)
+        except Exception:
+            hourly_cost_list.append(0)
+            continue
+
+    return hourly_cost_list
+
+# ------------------------------------------------------------------
+# 1)  all_real_numbers  — identical to your Colab version
+# ------------------------------------------------------------------
 def all_real_numbers(lst):
     invalid_count = 0
     for x in lst:
+        # 1) Not numeric
         if not isinstance(x, (int, float)):
             invalid_count += 1
+        # 2) NaN or infinite
         elif not math.isfinite(x):
             invalid_count += 1
-    if invalid_count > len(lst):
+
+    if invalid_count > len(line_outages):
         return False
     return True
 
-def check_bus_pair(df_line, df_trafo, bus_pair):
-    from_bus, to_bus = bus_pair
-    if df_trafo is not None:
-        transformer_match = (
-            ((df_trafo['hv_bus'] == from_bus) & (df_trafo['lv_bus'] == to_bus)) |
-            ((df_trafo['hv_bus'] == to_bus) & (df_trafo['lv_bus'] == from_bus))
-        ).any()
-        if transformer_match:
-            return True
-    line_match = (
-        ((df_line['from_bus'] == from_bus) & (df_line['to_bus'] == to_bus)) |
-        ((df_line['from_bus'] == to_bus) & (df_line['to_bus'] == from_bus))
-    ).any()
-    if line_match:
-        return False
-    st.error(f"Line or Transformer {from_bus}-{to_bus} not present in network.")
-    return None
 
-def generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency_mode=False, df_line=None):
-    if not outage_hours or not line_down or not risk_scores or df_line is None:
-        return []
-    no_of_lines_in_network = len(df_line) - 1
-    capped_limit = math.floor(0.2 * no_of_lines_in_network)
-    # # Debug: Log risk_scores structure
-    # st.write("Debug: risk_scores =", risk_scores)
-    # Extract numeric risk scores
-    def extract_risk(rs):
-        if isinstance(rs, (int, float)):
-            return float(rs)
-        elif isinstance(rs, dict):
-            for key in ['score', 'risk', 'value']:  # Common keys
-                if key in rs and isinstance(rs[key], (int, float)):
-                    return float(rs[key])
-                elif key in rs and isinstance(rs[key], str) and rs[key].replace('.', '', 1).isdigit():
-                    return float(rs[key])
-        elif isinstance(rs, str) and rs.replace('.', '', 1).isdigit():
-            return float(rs)
-        return 0.0  # Default for invalid entries
-    numeric_risk_scores = [extract_risk(rs) for rs in risk_scores]
-    combined = [(line[0], line[1], hour, risk) for line, hour, risk in zip(line_down, outage_hours, numeric_risk_scores)]
-    sorted_combined = sorted(combined, key=lambda x: x[-1], reverse=True)
-    line_outages = [(line[0], line[1], line[2]) for line in sorted_combined]
-    if capped_contingency_mode and len(line_outages) > capped_limit:
-        line_outages = line_outages[:capped_limit]
-    return line_outages
-
-# def overloaded_lines(net, max_loading_capacity):
-#     overloaded = []
-#     for idx, res in net.res_line.iterrows():
-#         val = transform_loading(res["loading_percent"])
-#         if all_real_numbers(net.res_line['loading_percent'].tolist()) == False:
-#             if not isinstance(val, (int, float)) or math.isnan(val) or val >= max_loading_capacity:
-#                 overloaded.append(idx)
-#         else:
-#             if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity:
-#                 overloaded.append(idx)
-#     return overloaded
-
-def overloaded_lines(net, max_loading_capacity):
+# ------------------------------------------------------------------
+# 2)  overloaded_lines  — identical to your Colab version
+# ------------------------------------------------------------------
+def overloaded_lines(net):
     overloaded = []
     # turn loading_percent Series into a list once
     loadings = transform_loading(net.res_line["loading_percent"])
@@ -191,7 +456,7 @@ def overloaded_lines(net, max_loading_capacity):
         # print(f"max loading capacity @ id {id} is {own_max}.")
 
         if not real_check:
-            # any NaN/non‑numeric or at‐limit is overloaded
+            # any NaN/non-numeric or at-limit is overloaded
             if not isinstance(loading_val, (int, float)) or math.isnan(loading_val) or loading_val >= own_max:
                 overloaded.append(idx)
         else:
@@ -200,161 +465,260 @@ def overloaded_lines(net, max_loading_capacity):
                 overloaded.append(idx)
     return overloaded
 
-# def overloaded_transformer(net, max_loading_capacity_transformer):
-#     overloaded = []
-#     if 'trafo' in net and net.trafo is not None:
-#         for idx, res in net.res_trafo.iterrows():
-#             val = transform_loading(res["loading_percent"])
-#             if all_real_numbers(net.res_trafo['loading_percent'].tolist()) == False:
-#                 if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity_transformer:
-#                     overloaded.append(idx)
-#             else:
-#                 if val >= max_loading_capacity_transformer:
-#                     overloaded.append(idx)
-#     return overloaded
+# -------------------------------------------------------------
+# 1)  Does the (from_bus, to_bus) pair correspond to a trafo?
+# -------------------------------------------------------------
+def check_bus_pair(xls_file, bus_pair):
+    """
+    Parameters
+    ----------
+    xls_file : BytesIO | str
+        Same object you get from st.file_uploader – or a path.
+    bus_pair : tuple[int, int]
+        (from_bus, to_bus) to look up.
 
-def overloaded_transformer(net, max_loading_capacity_transformer):
+    Returns
+    -------
+    True   → pair matches a transformer
+    False  → pair matches a line
+    None   → no match found
+    """
+    xls = pd.ExcelFile(xls_file)
+
+    if "Transformer Parameters" in xls.sheet_names:
+        transformer_df = pd.read_excel(xls_file, sheet_name="Transformer Parameters")
+        line_df        = pd.read_excel(xls_file, sheet_name="Line Parameters")
+
+        from_bus, to_bus = bus_pair
+
+        transformer_match = (
+            ((transformer_df["hv_bus"] == from_bus) & (transformer_df["lv_bus"] == to_bus)) |
+            ((transformer_df["hv_bus"] == to_bus) & (transformer_df["lv_bus"] == from_bus))
+        ).any()
+
+        line_match = (
+            ((line_df["from_bus"] == from_bus) & (line_df["to_bus"] == to_bus)) |
+            ((line_df["from_bus"] == to_bus)  & (line_df["to_bus"] == from_bus))
+        ).any()
+
+        if transformer_match:
+            return True
+        if line_match:
+            return False
+
+    # nothing matched
+    return None
+# -------------------------------------------------------------
+
+
+# -------------------------------------------------------------
+# 2)  Normalise “loading_percent” fields so units are consistent
+# -------------------------------------------------------------
+def transform_loading(a):
+    """
+    Multiplies every value < 2.5 by 100 so that fractional %
+    values (e.g. 0.95) become full percentages (95.0).
+    Works for scalars or lists.  Returns the same “shape” back.
+    """
+    if a is None:
+        return a
+
+    # turn scalars into a list for uniform processing
+    is_single = False
+    if isinstance(a, (int, float)):
+        a         = [a]
+        is_single = True
+
+    # decide whether conversion is needed
+    flag = True
+    for item in a:
+        if isinstance(item, (int, float)) and item >= 2.5:
+            flag = False
+
+    if flag:
+        a = [item * 100 if isinstance(item, (int, float)) else item for item in a]
+
+    return a[0] if is_single else a
+# -------------------------------------------------------------
+
+# -------------------------------------------------------------
+# 5)  Identify overloaded transformers (if any exist)
+# -------------------------------------------------------------
+def overloaded_transformer(net, xls_file, line_outages):
+    """
+    Same logic as Colab version but *xls_file* is explicit.
+    Returns list of transformer indices exceeding their max loading.
+    """
     overloaded = []
-    if 'trafo' not in net and net.trafo is None:
+
+    xls = pd.ExcelFile(xls_file)
+    if "Transformer Parameters" not in xls.sheet_names:
         return overloaded
-        
-    loadings = transform_loading(net.res_trafo["loading_percent"])
+
+    loadings   = transform_loading(net.res_trafo["loading_percent"])
+    # real_check = all_real_numbers(net.res_trafo["loading_percent"].tolist(),
+    #                               line_outages)
     real_check = all_real_numbers(net.res_trafo["loading_percent"].tolist())
 
-    for idx, (res, loading_val) in enumerate(zip(net.res_trafo.itertuples(), loadings)):
-        # grab this transformer’s own max
+
+    for idx, (_, loading_val) in enumerate(zip(net.res_trafo.itertuples(),
+                                               loadings)):
         own_max = net.trafo.at[idx, "max_loading_percent"]
-        # print(f"max transformer capacity @ id {id} is {own_max}.")
 
         if not real_check:
-            if loading_val is not None and not (isinstance(loading_val, float) and math.isnan(loading_val)) and loading_val >= own_max:
+            if (loading_val is not None and
+                not (isinstance(loading_val, float) and math.isnan(loading_val)) and
+                loading_val >= own_max):
                 overloaded.append(idx)
         else:
             if loading_val > own_max:
                 overloaded.append(idx)
     return overloaded
+# -------------------------------------------------------------
+# ------------------------------------------------------------------
+# Ensure `path` is available everywhere once the user has uploaded
+# their Excel file on Page-1.
+# ------------------------------------------------------------------
+path = st.session_state.get("uploaded_file")   # BytesIO object
 
-def initialize_network(df_bus, df_load, df_gen, df_line, df_trafo, df_load_profile, df_gen_profile):
-    net = pp.create_empty_network()
-    for idx, row in df_bus.iterrows():
-        pp.create_bus(net,
-                      name=row["name"],
-                      vn_kv=row["vn_kv"],
-                      zone=row["zone"],
-                      in_service=row["in_service"],
-                      max_vm_pu=row["max_vm_pu"],
-                      min_vm_pu=row["min_vm_pu"])
-    for idx, row in df_load.iterrows():
-        pp.create_load(net,
-                       bus=row["bus"],
-                       p_mw=row["p_mw"],
-                       q_mvar=row["q_mvar"],
-                       in_service=row["in_service"])
-    for idx, row in df_gen.iterrows():
-        if row["slack_weight"] == 1:
-            ext_grid = pp.create_ext_grid(net,
-                                          bus=row["bus"],
-                                          vm_pu=row["vm_pu"],
-                                          va_degree=0)
-            pp.create_poly_cost(net, element=ext_grid, et="ext_grid",
-                                cp0_eur_per_mw=row["cp0_pkr_per_mw"],
-                                cp1_eur_per_mw=row["cp1_pkr_per_mw"],
-                                cp2_eur_per_mw=row["cp2_pkr_per_mw"],
-                                cp0_eur_per_mvar=row["cp0_pkr_per_mvar"],
-                                cq1_eur_per_mvar=row["cq1_pkr_per_mvar"],
-                                cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
-        else:
-            gen_idx = pp.create_gen(net,
-                                    bus=row["bus"],
-                                    p_mw=row["p_mw"],
-                                    vm_pu=row["vm_pu"],
-                                    min_q_mvar=row["min_q_mvar"],
-                                    max_q_mvar=row["max_q_mvar"],
-                                    scaling=row["scaling"],
-                                    in_service=row["in_service"],
-                                    slack_weight=row["slack_weight"],
-                                    controllable=row["controllable"],
-                                    max_p_mw=row["max_p_mw"],
-                                    min_p_mw=row["min_p_mw"])
-            pp.create_poly_cost(net, element=gen_idx, et="gen",
-                                cp0_eur_per_mw=row["cp0_pkr_per_mw"],
-                                cp1_eur_per_mw=row["cp1_pkr_per_mw"],
-                                cp2_eur_per_mw=row["cp2_pkr_per_mw"],
-                                cp0_eur_per_mvar=row["cp0_pkr_per_mvar"],
-                                cq1_eur_per_mvar=row["cq1_pkr_per_mvar"],
-                                cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
-    for idx, row in df_line.iterrows():
-        if pd.isna(row["parallel"]):
-            continue
-        if isinstance(row["geodata"], str):
-            geodata = ast.literal_eval(row["geodata"])
-        else:
-            geodata = row["geodata"]
-        pp.create_line_from_parameters(net,
-                                       from_bus=row["from_bus"],
-                                       to_bus=row["to_bus"],
-                                       length_km=row["length_km"],
-                                       r_ohm_per_km=row["r_ohm_per_km"],
-                                       x_ohm_per_km=row["x_ohm_per_km"],
-                                       c_nf_per_km=row["c_nf_per_km"],
-                                       max_i_ka=row["max_i_ka"],
-                                       in_service=row["in_service"],
-                                       max_loading_percent=row["max_loading_percent"],
-                                       geodata=geodata)
-    if df_trafo is not None:
-        for idx, row in df_trafo.iterrows():
-            pp.create_transformer_from_parameters(net,
-                                                  hv_bus=row["hv_bus"],
-                                                  lv_bus=row["lv_bus"],
-                                                  sn_mva=row["sn_mva"],
-                                                  vn_hv_kv=row["vn_hv_kv"],
-                                                  vn_lv_kv=row["vn_lv_kv"],
-                                                  vk_percent=row["vk_percent"],
-                                                  vkr_percent=row["vkr_percent"],
-                                                  pfe_kw=row["pfe_kw"],
-                                                  i0_percent=row["i0_percent"],
-                                                  in_service=row["in_service"],
-                                                  max_loading_percent=row["max_loading_percent"])
-    load_dynamic = {}
-    for col in df_load_profile.columns:
-        m = re.match(r"p_mw_bus_(\d+)", col)
-        if m:
-            bus = int(m.group(1))
-            q_col = f"q_mvar_bus_{bus}"
-            if q_col in df_load_profile.columns:
-                load_dynamic[bus] = {"p": col, "q": q_col}
-    gen_dynamic = {}
-    for col in df_gen_profile.columns:
-        if col.startswith("p_mw"):
-            numbers = re.findall(r'\d+', col)
-            if numbers:
-                bus = int(numbers[-1])
-                gen_dynamic[bus] = col
-    return net, load_dynamic, gen_dynamic
 
-def calculate_hourly_cost(net, load_dynamic, gen_dynamic, num_hours, df_load_profile, df_gen_profile):
-    hourly_cost_list = []
-    for hour in range(num_hours):
-        for bus_id, cols in load_dynamic.items():
-            p_val = float(df_load_profile.at[hour, cols["p"]])
-            q_val = float(df_load_profile.at[hour, cols["q"]])
-            mask = net.load.bus == bus_id
-            net.load.loc[mask, "p_mw"] = p_val
-            net.load.loc[mask, "q_mvar"] = q_val
-        for bus_id, col in gen_dynamic.items():
-            p_val = float(df_gen_profile.at[hour, col])
-            if bus_id in net.ext_grid.bus.values:
-                mask = net.ext_grid.bus == bus_id
-                net.ext_grid.loc[mask, "p_mw"] = p_val
-            else:
-                mask = net.gen.bus == bus_id
-                net.gen.loc[mask, "p_mw"] = p_val
-        try:
-            pp.runopp(net)
-            hourly_cost_list.append(net.res_cost)
-        except:
-            hourly_cost_list.append(0)
-    return hourly_cost_list
+# ------------------------------------------------------------------
+# generate_line_outages  – identical logic, NO print statements
+# ------------------------------------------------------------------
+# def generate_line_outages(outage_hours, line_down, risk_scores,
+#                           capped_contingency_mode=False):
+#     if not outage_hours or not line_down or not risk_scores:
+#         return []
+
+#     sheet_name = "Line Parameters"
+#     df_line = pd.read_excel(path, sheet_name=sheet_name)
+#     no_of_lines_in_network = len(df_line) - 1
+#     capped_limit = math.floor(0.2 * no_of_lines_in_network)
+
+#     # Combine line, outage_hour, and risk into tuples
+#     combined = [
+#         (line[0], line[1], hour, risk)
+#         for line, hour, risk in zip(line_down, outage_hours, risk_scores)
+#     ]
+
+#     # Sort by risk score in descending order
+#     sorted_combined = sorted(combined, key=lambda x: x[-1], reverse=True)
+
+#     # Extract only (from_bus, to_bus, outage_hour)
+#     line_outages = [(line[0], line[1], line[2]) for line in sorted_combined]
+
+#     if capped_contingency_mode and len(line_outages) > capped_limit:
+#         line_outages = line_outages[:capped_limit]
+
+#     return line_outages
+
+# def generate_line_outages(outage_hours, line_down, risk_scores,
+#                           capped_contingency_mode=False):
+
+#     if not outage_hours or not line_down or not risk_scores:
+#         return []
+
+#     # ── 1  clean & align the risk-score list ───────────────────────────────
+#     needed = len(line_down)
+#     # keep only the numeric entries (positions 0,2,4,…) and take the first
+#     # *needed* of them.  This restores the Colab behaviour.
+#     cleaned  = [r for r in risk_scores if isinstance(r, (int, float))][:needed]
+
+#     for r in risk_scores:
+#         # convert dict → its numeric score
+#         if isinstance(r, dict):
+#             r = r.get("risk_score", 0)
+
+#         # accept only numeric values
+#         if isinstance(r, (int, float)):
+#             cleaned.append(r)
+
+#         if len(cleaned) == needed:      # stop when we have enough
+#             break
+
+#     # if still short, pad with zeros (shouldn't normally happen)
+#     cleaned += [0] * (needed - len(cleaned))
+#     # ----------------------------------------------------------------------
+
+#     # ── 2  build the tuples (from_bus, to_bus, hour, score) ────────────────
+#     combined = [
+#         (line[0], line[1], hour, score)
+#         for line, hour, score in zip(line_down, outage_hours, cleaned)
+#     ]
+
+#     # ── 3  sort by risk, apply contingency cap, return (fbus, tbus, hour) ──
+#     combined.sort(key=lambda x: x[-1], reverse=True)
+
+#     sheet_name = "Line Parameters"
+#     df_line = pd.read_excel(path, sheet_name=sheet_name)
+#     capped_limit = math.floor(0.2 * (len(df_line) - 1))
+
+#     if capped_contingency_mode:
+#         if len(combined) > capped_limit:
+#             combined = combined[:capped_limit]
+
+#     return [(f, t, hr) for f, t, hr, _ in combined]
+import math
+import pandas as pd
+
+# ──────────────────────────────────────────────────────────────────────
+# Path to the Excel file is already global in your app →  “path”
+# ──────────────────────────────────────────────────────────────────────
+
+def generate_line_outages(outage_hours, line_down, risk_scores,
+                          capped_contingency_mode=False):
+    """
+    Returns a list of (from_bus, to_bus, outage_hour) tuples.
+
+    When *capped_contingency_mode* is True keep only the worst 20 % lines
+    in the sense of
+        1) higher risk-score first, then
+        2) earlier outage-hour first.
+    """
+
+    # nothing to do
+    if not (outage_hours and line_down and risk_scores):
+        return []
+
+    # ── 1 · normalise / align the risk-score list ──────────────────────
+    needed  = len(line_down)
+    numeric = []
+
+    for r in risk_scores:
+        # risk can arrive either as a plain number or a tiny dict
+        if isinstance(r, dict):
+            r = r.get("risk_score", 0)
+
+        if isinstance(r, (int, float)):
+            numeric.append(r)
+
+        if len(numeric) == needed:                 # we have enough
+            break
+
+    # pad with zeros if Page-2 returned fewer scores than lines
+    numeric += [0] * (needed - len(numeric))
+
+    # ── 2 · build the working list (fbus, tbus, hour, score) ───────────
+    combined = [
+        (line[0], line[1], hour, score)
+        for line, hour, score in zip(line_down, outage_hours, numeric)
+    ]
+
+    # ── 3 · sort by our 2-key rule  (-score → descending) ──────────────
+    combined.sort(key=lambda x: (-x[3], x[2]))     # (score desc, hour asc)
+
+    # ── 4 · apply the 20 % cap if requested ────────────────────────────
+    if capped_contingency_mode:
+        n_lines      = len(pd.read_excel(path, sheet_name="Line Parameters")) - 1
+        capped_limit = math.floor(0.20 * n_lines)
+        combined     = combined[:capped_limit]
+
+    # ── 5 · return what the rest of the code expects ───────────────────
+    return [(f, t, hr) for f, t, hr, _ in combined]
+
+
+
+
 
 # Shared function: Create and display the map (used in Network Initialization)
 def create_map(df_line):
@@ -551,6 +915,7 @@ if selection == "Network Initialization":
             'df_line': df_line,
             'df_load_profile': df_load_profile,
             'df_gen_profile': df_gen_profile,
+            # 'df_gen_params':   df_gen_params,      #  ← NEW
             'df_trafo': df_trafo  # Add transformer data to session state
         }
 
@@ -1006,6 +1371,9 @@ elif selection == "Weather Risk Visualisation Using Google Earth Engine":
                             to_bus = df.loc[line_id, "to_bus"]
                             daily_results.append((int(from_bus), int(to_bus), int(max_risk)))
                             risk_scores.append(int(max_risk))  # Add this line to collect risk scores
+                            # if max_risk >= risk_score_threshold:
+                            #     risk_scores.append(int(max_risk))
+                            
                     
                             data.append({
                                 "line_id": props["line_id"],
@@ -1053,6 +1421,9 @@ elif selection == "Weather Risk Visualisation Using Google Earth Engine":
                     # Store the map and data in session state
                     st.session_state.weather_map_obj = weather_map
                     st.session_state.line_outage_data = line_outage_data
+                    st.session_state["outage_hours"] = line_outage_data["hours"]
+                    st.session_state["line_down"]    = line_outage_data["lines"]
+                    st.session_state["risk_scores"]  = line_outage_data["risk_scores"]
                     st.session_state.risk_df = risk_df
                     st.session_state.outage_data = outage_data
                     st.session_state.risk_score = risk_score
@@ -1269,1489 +1640,1804 @@ elif selection == "Weather Risk Visualisation Using Google Earth Engine":
             else:
                 st.info("Select parameters and click 'Process Weather Risk Data' to analyze weather risks to the electricity grid.")
                 
- 
+
 # Page 3: Projected future operations - Under Current OPF
 elif selection == "Projected Operation - Under Current OPF":
     st.title("Projected Operation - Under Current OPF")
-    
-    # Validate required data
-    required_keys = ['df_bus', 'df_load', 'df_gen', 'df_line', 'df_load_profile', 'df_gen_profile']
-    required_load_cols = ['bus', 'p_mw', 'q_mvar', 'in_service', 'criticality', 'load_coordinates']
-    if "network_data" not in st.session_state or st.session_state.network_data is None:
-        st.warning("Please upload and initialize network data on the Network Initialization page.")
-    elif not all(key in st.session_state.network_data for key in required_keys):
-         st.warning("Network data is incomplete. Ensure all required sheets are loaded.")
-    elif not all(col in st.session_state.network_data['df_load'].columns for col in required_load_cols):
-         st.warning("Load Parameters missing required columns (e.g., criticality, load_coordinates).")
-    elif "line_outage_data" not in st.session_state or st.session_state.line_outage_data is None:
-        st.warning("Please process weather risk data on the Weather Risk Visualisation page.")
-    else:
-        # Initialize session state
-        if "bau_results" not in st.session_state:
-            st.session_state.bau_results = None
-        if "bau_map_obj" not in st.session_state:
-            st.session_state.bau_map_obj = None
-        if "selected_hour" not in st.session_state:
-            st.session_state.selected_hour = None
+    # ── PERSISTENT STORAGE (add right after st.title(...)) ────────────────────
+    for k, v in (
+        ("bau_ready",                          False),
+        ("bau_day_end_df",                     None),
+        ("bau_hourly_cost_df",                 None),
+        ("bau_results",                        None),
+        ("line_outages",                       None),
+        ("line_idx_map",                       None),
+        ("trafo_idx_map",                      None),
+        ("max_loading_capacity",               None),
+        ("max_loading_capacity_transformer",   None),
+        ("bau_hour",                           0),        # hour to draw
+    ):
+        st.session_state.setdefault(k, v)
+    # ──────────────────────────────────────────────────────────────────────────
 
-        # Dropdown for contingency mode
-        contingency_mode = st.selectbox(
-            "Select Contingency Mode",
-            options=["Capped Contingency Mode", "Maximum Contingency Mode"],
-            help="Capped: Limits outages to 20% of network lines. Maximum: Includes all outages."
-        )
-        capped_contingency = contingency_mode == "Capped Contingency Mode"
+    
+    mode = st.selectbox("Select Contingency Mode",
+                    ["Capped Contingency Mode",
+                     "Maximum Contingency Mode"])
+    cap_flag = (mode == "Capped Contingency Mode")
+    
+    if st.button("Run Analysis"):
+
+         # ---------------------------------------------------------------------------
+        # Aliases so the Colab names still resolve
+        # ---------------------------------------------------------------------------
+        def Network_initialize():
+            return network_initialize(path)          # <— your global helper
         
-        # Button to run analysis
-        if st.button("Run Projected Operation - Under Current OPF Analysis"):
-            with st.spinner("Running Projected Operation - Under Current OPF analysis..."):
-                try:
-                    # Extract data
-                    network_data = st.session_state.network_data
-                    df_bus = network_data['df_bus']
-                    df_load = network_data['df_load']
-                    df_gen = network_data['df_gen']
-                    df_line = network_data['df_line']
-                    df_load_profile = network_data['df_load_profile']
-                    df_gen_profile = network_data['df_gen_profile']
-                    df_trafo = network_data.get('df_trafo')
-                    line_outage_data = st.session_state.line_outage_data
-                    outage_hours = line_outage_data['hours']
-                    line_down = line_outage_data['lines']
-                    risk_scores = line_outage_data['risk_scores']
-                            
+        def overloaded_transformer_colab(net):
+            # keep original single-arg call signature
+            return overloaded_transformer(net, path, line_outages)
+        # ---------------------------------------------------------------------------
         
-                    def run_bau_simulation(net, load_dynamic, gen_dynamic, num_hours, line_outages, max_loading_capacity, max_loading_capacity_transformer):
-                        business_as_usual_cost = calculate_hourly_cost(net, load_dynamic, gen_dynamic, num_hours, df_load_profile, df_gen_profile)
-                        cumulative_load_shedding = {bus: {"p_mw": 0.0, "q_mvar": 0.0} for bus in net.load["bus"].unique()}
-                        total_demand_per_bus = {}
-                        p_cols = [c for c in df_load_profile.columns if c.startswith("p_mw_bus_")]
-                        q_cols = [c for c in df_load_profile.columns if c.startswith("q_mvar_bus_")]
-                        bus_ids = set(int(col.rsplit("_", 1)[1]) for col in p_cols)
-                        for bus in bus_ids:
-                            p_col = f"p_mw_bus_{bus}"
-                            q_col = f"q_mvar_bus_{bus}"
-                            total_p = df_load_profile[p_col].sum()
-                            total_q = df_load_profile[q_col].sum()
-                            total_demand_per_bus[bus] = {"p_mw": float(total_p), "q_mvar": float(total_q)}
-                        hourly_shed_bau = [0] * num_hours
-                        served_load_per_hour = []
-                        gen_per_hour_bau = []
-                        slack_per_hour_bau = []
-                        loading_percent_bau = []
-                        shedding_buses = []
-                        
-                        for hour in range(num_hours):
-                            # Reset network state
-                            net.line["in_service"] = True
-                            if df_trafo is not None:
-                                net.trafo["in_service"] = True
-                            
-                            # Apply outages
-                            for (fbus, tbus, start_hr) in line_outages:
-                                if hour < start_hr:
-                                    continue
-                                is_trafo = check_bus_pair(df_line, df_trafo, (fbus, tbus))
-                                if is_trafo:
-                                    mask_tf = (
-                                        ((net.trafo.hv_bus == fbus) & (net.trafo.lv_bus == tbus)) |
-                                        ((net.trafo.hv_bus == tbus) & (net.trafo.lv_bus == fbus))
-                                    )
-                                    if mask_tf.any():
-                                        for tf_idx in net.trafo[mask_tf].index:
-                                            net.trafo.at[tf_idx, "in_service"] = False
-                                elif is_trafo == False:
-                                    idx = line_idx_map.get((fbus, tbus))
-                                    if idx is not None:
-                                        net.line.at[idx, "in_service"] = False
-                            
-                            # Update profiles
-                            for idx in net.load.index:
-                                bus = net.load.at[idx, "bus"]
-                                if bus in load_dynamic:
-                                    p = df_load_profile.at[hour, load_dynamic[bus]["p"]]
-                                    q = df_load_profile.at[hour, load_dynamic[bus]["q"]]
-                                    net.load.at[idx, "p_mw"] = p
-                                    net.load.at[idx, "q_mvar"] = q
-                            for idx in net.gen.index:
-                                bus = net.gen.at[idx, "bus"]
-                                if bus in gen_dynamic:
-                                    p = df_gen_profile.at[hour, gen_dynamic[bus]]
-                                    net.gen.at[idx, "p_mw"] = p
-                            
-                            # Update criticality
-                            criticality_map = dict(zip(df_load["bus"], df_load["criticality"]))
-                            net.load["bus"] = net.load["bus"].astype(int)
-                            net.load["criticality"] = net.load["bus"].map(criticality_map)
-                            
-                            # Run power flow
-                            try:
-                                pp.runpp(net)
-                            except:
-                                business_as_usual_cost[hour] = 0
-                                served_load_per_hour.append([None] * len(net.load))
-                                gen_per_hour_bau.append([None] * len(net.res_gen))
-                                slack_per_hour_bau.append(None)
-                                loading_percent_bau.append([None] * (len(net.line) + (len(net.trafo) if df_trafo is not None else 0)))
-                                continue
-                            
-                            # Record loadings
-                            intermediate_var = transform_loading(net.res_line["loading_percent"]).copy()
-                            if df_trafo is not None:
-                                intermediate_var.extend(transform_loading(net.res_trafo["loading_percent"].tolist()))
-                            loading_percent_bau.append(intermediate_var)
-                            
-                            # Check overloads
-                            overloads = overloaded_lines(net, max_loading_capacity)
-                            overloads_trafo = overloaded_transformer(net, max_loading_capacity_transformer)
-                            all_loads_zero_flag = False
-                            if not overloads and not overloads_trafo and all_real_numbers(loading_percent_bau[-1]):
-                                slack_per_hour_bau.append(float(net.res_ext_grid.at[0, "p_mw"]))
-                                served_load_per_hour.append(net.load["p_mw"].tolist() if not net.load["p_mw"].isnull().any() else [None] * len(net.load))
-                                gen_per_hour_bau.append(net.res_gen["p_mw"].tolist() if not net.res_gen["p_mw"].isnull().any() else [None] * len(net.res_gen))
-                                continue
-                            
-                            # Load shedding loop
-                            hour_shed = 0.0
-                            while (overloads or overloads_trafo) and not all_loads_zero_flag:
-                                for crit in sorted(net.load['criticality'].dropna().unique(), reverse=True):
-                                    for ld_idx in net.load[net.load['criticality'] == crit].index:
-                                        if not overloads and not overloads_trafo:
-                                            break
-                                        value = max_loading_capacity_transformer if df_trafo is not None else max_loading_capacity
-                                        factor = ((1/500) * value - 0.1)/2
-                                        bus = net.load.at[ld_idx, 'bus']
-                                        dp = factor * net.load.at[ld_idx, 'p_mw']
-                                        hour_shed += dp
-                                        dq = factor * net.load.at[ld_idx, 'q_mvar']
-                                        net.load.at[ld_idx, 'p_mw'] -= dp
-                                        net.load.at[ld_idx, 'q_mvar'] -= dq
-                                        cumulative_load_shedding[bus]['p_mw'] += dp
-                                        cumulative_load_shedding[bus]['q_mvar'] += dq
-                                        hourly_shed_bau[hour] += dp
-                                        shedding_buses.append((hour, int(bus)))
-                                        try:
-                                            try:
-                                                pp.runopp(net)
-                                                # business_as_usuall_cost[hour] = net.res_cost if net.OPF_converged else business_as_usuall_cost[hour]
-                                                if net.OPF_converged:
-                                                    business_as_usual_cost[hour] = net.res_cost
-                                            except:
-                                                pp.runpp(net)
-                                                pass
-                                        except:
-                                            business_as_usual_cost[hour] = 0
-                                            overloads.clear()
-                                            if df_trafo is not None:
-                                                overloads_trafo.clear()
-                                            break
-                                        if dp < 0.01:
-                                            all_loads_zero_flag = True
-                                            business_as_usual_cost[hour] = 0
-                                            remaining_p = net.load.loc[net.load["bus"] == bus, "p_mw"].sum()
-                                            remaining_q = net.load.loc[net.load["bus"] == bus, "q_mvar"].sum()
-                                            cumulative_load_shedding[bus]["p_mw"] += remaining_p
-                                            cumulative_load_shedding[bus]["q_mvar"] += remaining_q
-                                            hourly_shed_bau[hour] += sum(net.load['p_mw'])
-                                            for i in range(len(net.load)):
-                                                net.load.at[i, 'p_mw'] = 0
-                                                net.load.at[i, 'q_mvar'] = 0
-                                            break
-                                    if not overloads and not overloads_trafo:
-                                        break
-                                overloads = overloaded_lines(net, max_loading_capacity)
-                                overloads_trafo = overloaded_transformer(net, max_loading_capacity_transformer)
-                            
-                            # Record final state
-                            served_load_per_hour.append(net.load["p_mw"].tolist() if not net.load["p_mw"].isnull().any() else [None] * len(net.load))
-                            gen_per_hour_bau.append(net.res_gen["p_mw"].tolist() if not net.res_gen["p_mw"].isnull().any() else [None] * len(net.res_gen))
-                            slack_per_hour_bau.append(float(net.res_ext_grid.at[0, "p_mw"]) if not net.res_ext_grid["p_mw"].isnull().any() else None)
-                        
-                        return (business_as_usual_cost, cumulative_load_shedding, total_demand_per_bus,
-                                hourly_shed_bau, served_load_per_hour, gen_per_hour_bau, slack_per_hour_bau,
-                                loading_percent_bau, shedding_buses)
-                    
-                    # CHANGED: Pass required arguments to initialize_network
-                    net, load_dynamic, gen_dynamic = initialize_network(df_bus, df_load, df_gen, df_line, df_trafo, df_load_profile, df_gen_profile)
-                    num_hours = len(df_load_profile)
-                    
-                    # Create index maps
-                    line_idx_map = {
-                        (row["from_bus"], row["to_bus"]): idx for idx, row in net.line.iterrows()
-                    }
-                    line_idx_map.update({
-                        (row["to_bus"], row["from_bus"]): idx for idx, row in net.line.iterrows()
-                    })
-                    st.session_state.line_idx_map = line_idx_map  # Store in session state
-                    trafo_idx_map = {}
-                    if df_trafo is not None:
-                        trafo_idx_map = {
-                            (row["hv_bus"], row["lv_bus"]): idx for idx, row in net.trafo.iterrows()
-                        }
-                        trafo_idx_map.update({
-                            (row["lv_bus"], row["hv_bus"]): idx for idx, row in net.trafo.iterrows()
-                        })
-                    st.session_state.trafo_idx_map = trafo_idx_map  # Store in session state
-                    
-                    # Get max loading capacities
-                    max_loading_capacity = max(df_line['max_loading_percent'].dropna().tolist())
-                    max_loading_capacity_transformer = max(df_trafo['max_loading_percent'].dropna().tolist()) if df_trafo is not None else max_loading_capacity
-                    st.session_state.max_loading_capacity = max_loading_capacity  # Store in session state
-                    st.session_state.max_loading_capacity_transformer = max_loading_capacity_transformer  # Store in session state
-                    
-                    # Generate outages
-                    line_outages = generate_line_outages(outage_hours, line_down, risk_scores, capped_contingency, df_line=df_line)
-                    st.session_state.line_outages = line_outages  # Store in session state
-                    
-                    # Run simulation
-                    (business_as_usual_cost, cumulative_load_shedding, total_demand_per_bus,
-                     hourly_shed_bau, served_load_per_hour, gen_per_hour_bau,
-                     slack_per_hour_bau, loading_percent_bau, shedding_buses) = run_bau_simulation(
-                        net, load_dynamic, gen_dynamic, num_hours, line_outages,
-                        max_loading_capacity, max_loading_capacity_transformer
-                    )
-                    
-                    # Store results
-                    st.session_state.bau_results = {
-                        'business_as_usual_cost': business_as_usual_cost,
-                        'cumulative_load_shedding': cumulative_load_shedding,
-                        'total_demand_per_bus': total_demand_per_bus,
-                        'hourly_shed_bau': hourly_shed_bau,
-                        'served_load_per_hour': served_load_per_hour,
-                        'gen_per_hour_bau': gen_per_hour_bau,
-                        'slack_per_hour_bau': slack_per_hour_bau,
-                        'loading_percent_bau': loading_percent_bau,
-                        'shedding_buses': shedding_buses
-                    }
-                    
-                except Exception as e:
-                    st.error(f"Error running Projected Operation - Under Current OPF analysis: {str(e)}")
-                    st.error(traceback.format_exc())
         
-        if st.session_state.bau_results is not None:
-            st.subheader("Day End Summary")
-            cumulative_load_shedding = st.session_state.bau_results['cumulative_load_shedding']
-            total_demand_per_bus = st.session_state.bau_results['total_demand_per_bus']
-            if any(v["p_mw"] > 0 or v["q_mvar"] > 0 for v in cumulative_load_shedding.values()):
-                summary_data = []
-                for bus, shed in cumulative_load_shedding.items():
-                    total = total_demand_per_bus.get(bus, {"p_mw": 0.0, "q_mvar": 0.0})
-                    summary_data.append({
-                        "Bus": bus,
-                        "Load Shedding (MWh)": round(shed['p_mw'], 2),
-                        "Load Shedding (MVARh)": round(shed['q_mvar'], 2),
-                        "Total Demand (MWh)": round(total['p_mw'], 2),
-                        "Total Demand (MVARh)": round(total['q_mvar'], 2)
-                    })
-                summary_df = pd.DataFrame(summary_data)
-                st.dataframe(summary_df, use_container_width=True)
-            else:
-                st.success("No load shedding occurred today.")
+        # ---------------------------------------------------------------------------
+        # MAIN FUNCTION – unchanged numerical logic, no prints, returns DataFrames
+        # ---------------------------------------------------------------------------
+        def current_opf(line_outages):
+            df_trafo = []
             
-            st.write("### Hourly Generation Costs")
-            business_as_usual_cost = st.session_state.bau_results['business_as_usual_cost']
-            cost_data = [{"Hour": i, "Cost (PKR)": round(cost, 2)} for i, cost in enumerate(business_as_usual_cost)]
-            cost_df = pd.DataFrame(cost_data)
-            st.dataframe(cost_df, use_container_width=True)
+            path = st.session_state.get("uploaded_file")   # BytesIO object
+        
+            xls = pd.ExcelFile(path)                       # same object Colab used
+        
+            # ----------------------------------------------------------------------
+            # 1. Build fresh network + get helper objects
+            # ----------------------------------------------------------------------
+            if "Transformer Parameters" in xls.sheet_names:
+                [net, df_bus, df_slack, df_line, num_hours,
+                 load_dynamic, gen_dynamic,
+                 df_load_profile, df_gen_profile, df_trafo] = Network_initialize()
+            else:
+                [net, df_bus, df_slack, df_line, num_hours,
+                 load_dynamic, gen_dynamic,
+                 df_load_profile, df_gen_profile]          = Network_initialize()
+        
+            business_as_usuall_cost = calculating_hourly_cost(path)
+        
+            # ----------------------------------------------------------------------
+            # 2. Set up spatial helpers (identical to Colab)
+            # ----------------------------------------------------------------------
+            df_lines = df_line.copy()
+            df_lines["geodata"] = df_lines["geodata"].apply(
+                lambda x: [(lon, lat) for lat, lon in eval(x)] if isinstance(x, str) else x)
+        
+            gdf = gpd.GeoDataFrame(
+                df_lines,
+                geometry=[LineString(coords) for coords in df_lines["geodata"]],
+                crs="EPSG:4326")
+        
+            load_df = pd.read_excel(path, sheet_name="Load Parameters")
+            load_df["coordinates"] = load_df["load_coordinates"].apply(ast.literal_eval)
+        
+            # line / trafo index maps
+            line_idx_map = {(r["from_bus"], r["to_bus"]): idx for idx, r in net.line.iterrows()}
+            line_idx_map.update({(r["to_bus"], r["from_bus"]): idx for idx, r in net.line.iterrows()})
+        
+            trafo_idx_map = {}
+            if "Transformer Parameters" in xls.sheet_names:
+                trafo_idx_map = {(r["hv_bus"], r["lv_bus"]): idx for idx, r in net.trafo.iterrows()}
+                trafo_idx_map.update({(r["lv_bus"], r["hv_bus"]): idx for idx, r in net.trafo.iterrows()})
+        
+            # ----------------------------------------------------------------------
+            # 3. Book-keeping dicts  (unchanged)
+            # ----------------------------------------------------------------------
+            net.load["bus"] = net.load["bus"].astype(int)
+            cumulative_load_shedding = {bus: {"p_mw": 0.0, "q_mvar": 0.0}
+                                        for bus in net.load["bus"].unique()}
+        
+            total_demand_per_bus = {}
+            p_cols = [c for c in df_load_profile.columns if c.startswith("p_mw_bus_")]
+            q_cols = [c for c in df_load_profile.columns if c.startswith("q_mvar_bus_")]
+            bus_ids = set(int(col.rsplit("_", 1)[1]) for col in p_cols)
+            for bus in bus_ids:
+                p_col, q_col = f"p_mw_bus_{bus}", f"q_mvar_bus_{bus}"
+                total_demand_per_bus[bus] = {"p_mw": float(df_load_profile[p_col].sum()),
+                                             "q_mvar": float(df_load_profile[q_col].sum())}
+        
+            # ----------------------------------------------------------------------
+            # 4. Fixed 20 % shed fractions (same logic)
+            # ----------------------------------------------------------------------
+            initial_load_p = {}   # real power
+            initial_load_q = {}   # reactive
+            initial_load_p = {int(net.load.at[i, "bus"]): net.load.at[i, "p_mw"]
+                              for i in net.load.index}
+            initial_load_q = {int(net.load.at[i, "bus"]): net.load.at[i, "q_mvar"]
+                              for i in net.load.index}
+            shed_pct = 0.20
+            fixed_shed_p = {b: shed_pct * p for b, p in initial_load_p.items()}
+            fixed_shed_q = {b: shed_pct * q for b, q in initial_load_q.items()}
+        
+            # ----------------------------------------------------------------------
+            # 5. Storage for hour-by-hour results
+            # ----------------------------------------------------------------------
+            hourly_shed_bau     = [0] * num_hours
+            loading_records     = []
+            loading_percent_bau = []
+            served_load_per_hour= []
+            gen_per_hour_bau    = []
+            slack_per_hour_bau  = []
+            shedding_buses      = []
+            seen_buses          = set()
+        
+            # ----------------------------------------------------------------------
+            # 6. ====  HOURLY LOOP  =================================================
+            # ----------------------------------------------------------------------
+            for hour in range(num_hours):
+                # print(f"========== HOUR {hour} ==========")
+        
+                # 6-a) Apply scheduled outages
+                for (fbus, tbus, start_hr) in line_outages:
+                    if hour < start_hr:
+                        continue
+                    is_trafo = check_bus_pair(path, (fbus, tbus))
+                    if is_trafo == True:
+                        mask_tf = (((net.trafo.hv_bus == fbus) & (net.trafo.lv_bus == tbus)) |
+                                   ((net.trafo.hv_bus == tbus) & (net.trafo.lv_bus == fbus)))    
+                        if not mask_tf.any():
+                            pass
+                        else:
+                            for tf_idx in net.trafo[mask_tf].index:
+                                net.trafo.at[tf_idx, "in_service"] = False
+                    else:
+                        idx = line_idx_map.get((fbus, tbus))
+                        if idx is not None:
+                            net.line.at[idx, "in_service"] = False
+        
+                # 6-b) Update hourly load & gen profiles
+                for idx in net.load.index:
+                    bus = net.load.at[idx, "bus"]
+                    if bus in load_dynamic:
+                        net.load.at[idx, "p_mw"] = df_load_profile.at[hour, load_dynamic[bus]["p"]]
+                        net.load.at[idx, "q_mvar"]= df_load_profile.at[hour, load_dynamic[bus]["q"]]
+                for idx in net.gen.index:
+                    bus = net.gen.at[idx, "bus"]
+                    if bus in gen_dynamic:
+                        net.gen.at[idx, "p_mw"] = df_gen_profile.at[hour, gen_dynamic[bus]]
+        
+                # 6-c) Re-read criticality each hour (kept identical)
+                df_load_params = pd.read_excel(path, sheet_name="Load Parameters", index_col=0)
+                crit_map = dict(zip(df_load_params["bus"], df_load_params["criticality"]))
+                net.load["bus"] = net.load["bus"].astype(int)
+                net.load["criticality"] = net.load["bus"].map(crit_map)
+        
+                # 6-d) Initial power-flow try
+                flag_initial_fail = False
+                try:
+                    pp.runpp(net)
+                except:
+                    flag_initial_fail = True
+        
+                if flag_initial_fail == False:
+                    inter = transform_loading(net.res_line["loading_percent"])
+                    if "Transformer Parameters" in xls.sheet_names:
+                        inter.extend(transform_loading(net.res_trafo["loading_percent"].tolist()))
+                    loading_records.append(inter)
+                    loading_percent_bau.append(inter.copy())
+                else:
+                    loading_records.append([0]*(len(net.res_line)+len(df_trafo)))
+                    loading_percent_bau.append([0]*(len(net.res_line)+len(df_trafo)))
+        
+                # 6-e) Check overloads and shed if needed
+                overloads       = overloaded_lines(net)
+                overloads_trafo = overloaded_transformer_colab(net)
+                all_loads_zero_flag = False
+        
+                if (overloads == []) and (overloads_trafo == []) and (all_real_numbers(loading_records[-1])):
+                    slack_per_hour_bau.append(float(net.res_ext_grid.at[0, "p_mw"]))
+                    # served_load_per_hour.append(net.load["p_mw"].tolist())
+                    # gen_per_hour_bau.append(net.res_gen["p_mw"].tolist())
 
-        # Visualization cc
-    
-        # ────────────────────────────────────────────────────────────────────────────
-        # Visualisation – Projected future operations - Under Current OPF (final fix)
-        # ────────────────────────────────────────────────────────────────────────────
-        st.subheader("Visualize Projected Operation - Under Current OPF")
+                    if net.load["p_mw"].isnull().any():
+                        served_load_per_hour.append([None] * len(net.load))
+                    else:
+                        hourly_loads = net.load["p_mw"].tolist()
+                        served_load_per_hour.append(hourly_loads)
         
-        # initialise session key that remembers which hour to show
-        if "visualize_hour" not in st.session_state:
-            st.session_state.visualize_hour = None
-        
-        if st.session_state.bau_results is None:
-            st.info("Please run the Projected Operation - Under Current OPF analysis first.")
-        else:
-            num_hours   = len(st.session_state.network_data['df_load_profile'])
-            hour_labels = [f"Hour {i}" for i in range(num_hours)]
-            picked_hour_label = st.selectbox("Select Hour to Visualize", hour_labels)
-            picked_hour       = int(picked_hour_label.split()[-1])
-        
-            # button only sets the hour to show; the actual drawing happens *outside*
-            if st.button("Generate Visualization", key="generate_vis"):
-                st.session_state.visualize_hour = picked_hour
-        
-            # nothing to draw yet
-            if st.session_state.visualize_hour is None:
-                st.stop()
-        
-            # ── build / display the map every run ───────────────────────────────────
-            hour_idx = st.session_state.visualize_hour
-            try:
-                # data prep ----------------------------------------------------------
-                df_line  = st.session_state.network_data['df_line'].copy()
-                df_load  = st.session_state.network_data['df_load'].copy()
-                df_trafo = st.session_state.network_data.get('df_trafo')
-        
-                loading_percent  = st.session_state.bau_results['loading_percent_bau'][hour_idx]
-                shedding_buses   = st.session_state.bau_results['shedding_buses']
-        
-                no_of_lines = len(df_line) if df_trafo is None else len(df_line) - len(df_trafo)
-        
-                line_idx_map  = st.session_state.get('line_idx_map', {})
-                trafo_idx_map = st.session_state.get('trafo_idx_map', {})
-        
-                # convert geodata to lon/lat tuples & GeoDataFrame
-                df_line["geodata"] = df_line["geodata"].apply(
-                    lambda x: [(lon, lat) for lat, lon in eval(x)] if isinstance(x, str) else x
-                )
-                gdf = gpd.GeoDataFrame(
-                    df_line,
-                    geometry=[LineString(coords) for coords in df_line["geodata"]],
-                    crs="EPSG:4326"
-                )
-                gdf["idx"]     = gdf.index
-                gdf["loading"] = gdf["idx"].map(lambda i: loading_percent[i] if i < len(loading_percent) else 0.0)
-        
-                # lines down because of weather
-                weather_down = set()
-                if "line_outages" in st.session_state:
-                    for (fbus, tbus, start_hr) in st.session_state.line_outages:
-                        if hour_idx >= start_hr:
-                            is_tf = check_bus_pair(df_line, df_trafo, (fbus, tbus))
-                            idx   = trafo_idx_map.get((fbus, tbus)) + no_of_lines if is_tf else line_idx_map.get((fbus, tbus))
-                            if idx is not None:
-                                weather_down.add(idx)
-                gdf["down_weather"] = gdf["idx"].isin(weather_down)
-        
-                # Folium map ---------------------------------------------------------
-                m = folium.Map(location=[27.0, 66.5], zoom_start=7, width=800, height=600)
-        
-                max_line_cap = st.session_state.get('max_loading_capacity',               100.0)
-                max_trf_cap  = st.session_state.get('max_loading_capacity_transformer',   max_line_cap)
-        
-                def col_line(p):   # for lines
-                    if p is None or p == 0:           return '#000000'
-                    if p <= 0.75 * max_line_cap:      return '#00FF00'
-                    if p <= 0.90 * max_line_cap:      return '#FFFF00'
-                    if p <  max_line_cap:             return '#FFA500'
-                    return '#FF0000'
-        
-                def col_trf(p):    # for transformers
-                    if p is None or p == 0:           return '#000000'
-                    if p <= 0.75 * max_trf_cap:       return '#00FF00'
-                    if p <= 0.90 * max_trf_cap:       return '#FFFF00'
-                    if p <  max_trf_cap:              return '#FFA500'
-                    return '#FF0000'
-        
-                def style_feat(feat):
-                    p = feat["properties"]
-                    if p.get("down_weather", False):
-                        return {"color": "#000000", "weight": 3}
-                    pct   = p.get("loading", 0.0)
-                    colour = col_trf(pct) if p["idx"] >= no_of_lines and df_trafo is not None else col_line(pct)
-                    return {"color": colour, "weight": 3}
-        
-                folium.GeoJson(
-                    gdf.__geo_interface__, name=f"Transmission Net at Hour {hour_idx}",
-                    style_function=style_feat
-                ).add_to(m)
-        
-                # load‑bus circles
-                shed_now = [b for (h,b) in shedding_buses if h == hour_idx]
-                for _, row in df_load.iterrows():
-                    bus = row["bus"]
-                    lat, lon = ast.literal_eval(row["load_coordinates"])
-                    col = "red" if bus in shed_now else "green"
-                    folium.Circle((lat, lon), radius=20000,
-                                  color=col, fill_color=col, fill_opacity=0.5).add_to(m)
-        
-                # ---------- legend (replace the whole legend_html string) ------------------
-                legend_html = """
-                <style>
-                  .legend-box,* .legend-box { color:#000 !important; }
-                </style>
-                
-                <div class="legend-box leaflet-control leaflet-bar"
-                     style="position:absolute; top:150px; left:10px; z-index:9999;
-                            background:#ffffff; padding:8px; border:1px solid #ccc;
-                            font-size:14px; max-width:210px;">
-                  <strong>Line Load Level&nbsp;(&#37; of Max)</strong><br>
-                  <span style='display:inline-block;width:12px;height:12px;background:#00FF00;'></span>&nbsp;Below&nbsp;75&nbsp;%<br>
-                  <span style='display:inline-block;width:12px;height:12px;background:#FFFF00;'></span>&nbsp;75–90&nbsp;%<br>
-                  <span style='display:inline-block;width:12px;height:12px;background:#FFA500;'></span>&nbsp;90–100&nbsp;%<br>
-                  <span style='display:inline-block;width:12px;height:12px;background:#FF0000;'></span>&nbsp;Overloaded&nbsp;>&nbsp;100&nbsp;%<br>
-                  <span style='display:inline-block;width:12px;height:12px;background:#000000;'></span>&nbsp;Weather‑Impacted<br><br>
-                
-                  <strong>Load Status</strong><br>
-                  <span style='display:inline-block;width:12px;height:12px;background:#008000;border-radius:50%;'></span>&nbsp;Fully Served<br>
-                  <span style='display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;'></span>&nbsp;Not Fully Served
-                </div>
-                """
-                m.get_root().html.add_child(folium.Element(legend_html))
-
-                
-                # ---------------- title (overwrite your title_html string) -----------------
-                title_html = f"""
-                <style>
-                  .map-title {{ color:#000 !important; }}
-                </style>
-                
-                <div class="map-title leaflet-control leaflet-bar"
-                     style="position:absolute; top:90px; left:10px; z-index:9999;
-                            background:rgba(255,255,255,0.9); padding:4px;
-                            font-size:18px; font-weight:bold;">
-                  Projected Operation - Under Current OPF – Hour {hour_idx}
-                </div>
-                """
-                m.get_root().html.add_child(folium.Element(title_html))
-
-                folium.LayerControl(collapsed=False).add_to(m)
-        
-                # display
-                st.write(f"### Network Loading Visualization – Hour {hour_idx}")
-                st_folium(m, width=800, height=600, key=f"bau_map_{hour_idx}")
-        
-            except Exception as e:
-                st.error(f"Error generating visualization: {e}")
-                st.error(traceback.format_exc())
-
-
-# ────────────────────────────────────────────────────────────────────────────
-# Page 4 :  Weather‑Aware System
-# ────────────────────────────────────────────────────────────────────────────
-elif selection == "Projected Operation - Under Weather Risk Aware OPF":
-    st.title("Projected Operation - Under Weather Risk Aware OPF")
-
-    # --- sanity checks ------------------------------------------------------
-    req_keys = ["network_data", "line_outage_data", "bau_results"]
-    if any(k not in st.session_state or st.session_state[k] is None for k in req_keys):
-        st.warning(
-            "Run **Network Initialization**, **Weather Risk Visualisation**, "
-            "and **Projected Operation - Under Current OPF** first."
-        )
-        st.stop()
-
-    net_data          = st.session_state.network_data
-    df_bus            = net_data["df_bus"]
-    df_load           = net_data["df_load"]
-    df_gen            = net_data["df_gen"]
-    df_line           = net_data["df_line"]
-    df_load_profile   = net_data["df_load_profile"]
-    df_gen_profile    = net_data["df_gen_profile"]
-    df_trafo          = net_data.get("df_trafo")
-    num_hours         = len(df_load_profile)
-
-    # contingency selection – same logic as BAU -----------------------------
-    cont_mode = st.selectbox(
-        "Select Contingency Mode",
-        ["Capped Contingency Mode", "Maximum Contingency Mode"],
-        help="Capped: ≤ 20 % of lines;  Maximum: all forecast outages."
-    )
-    capped = cont_mode == "Capped Contingency Mode"
-
-    # build outages with the helper you already have
-    line_out_data  = st.session_state.line_outage_data
-    line_outages   = generate_line_outages(
-        line_out_data["hours"],
-        line_out_data["lines"],
-        line_out_data["risk_scores"],
-        capped_contingency_mode=capped,
-        df_line=df_line,
-    )
-
-    # run button -------------------------------------------------------------
-    if st.button("Run Weather‑Aware Analysis"):
-        # -------------------------------------------------------------------- #
-        # 1.  rebuild the pandapower network so we start from a fresh copy
-        # -------------------------------------------------------------------- #
-        net, load_dyn, gen_dyn = initialize_network(
-            df_bus, df_load, df_gen,
-            df_line, df_trafo,
-            df_load_profile, df_gen_profile,
-        )
-
-        # maps for quick look‑up (already computed once – reuse)
-        line_idx_map  = st.session_state.get("line_idx_map", {})
-        trafo_idx_map = st.session_state.get("trafo_idx_map", {})   # ← add this
-
-        # figure out how many plain lines the network has
-        no_of_lines = len(df_line) if df_trafo is None else len(df_line) - len(df_trafo)
-        
-        max_line_cap = st.session_state.get("max_loading_capacity", 100.0)
-        max_trf_cap  = st.session_state.get("max_loading_capacity_transformer", max_line_cap)
-        # storage  -----------------------------------------------------------
-        wa_cost                = calculate_hourly_cost(
-            net, load_dyn, gen_dyn, num_hours,
-            df_load_profile, df_gen_profile
-        )
-        cumulative_shed        = {b: {"p_mw":0., "q_mvar":0.}
-                                  for b in net.load.bus.unique()}
-        hourly_shed            = [0.]*num_hours
-        loading_percent_wa     = []
-        serving_per_hour       = []
-        gen_per_hour           = []
-        slack_per_hour         = []
-        shedding_buses         = []
-
-        # def overloaded_lines1(net):
-        #     overloaded = []
-        #     # turn loading_percent Series into a list once
-        #     loadings = transform_loading(net.res_line["loading_percent"])
-        #     real_check = all_real_numbers(net.res_line["loading_percent"].tolist())
-        
-        #     for idx, (res, loading_val) in enumerate(zip(net.res_line.itertuples(), loadings)):
-        #         # grab this line’s own max
-        #         own_max = net.line.at[idx, "max_loading_percent"]
-        #         # print(f"max loading capacity @ id {id} is {own_max}.")
-        
-        #         if not real_check:
-        #             # any NaN/non‑numeric or at‐limit is overloaded
-        #             if not isinstance(loading_val, (int, float)) or math.isnan(loading_val) or loading_val >= own_max:
-        #                 overloaded.append(idx)
-        #         else:
-        #             # only truly > its own max
-        #             if loading_val is not None and not (isinstance(loading_val, float) and math.isnan(loading_val)) and loading_val > own_max:
-        #                 overloaded.append(idx)
-        #     return overloaded
-        
-        # def overloaded_transformer(net, max_loading_capacity_transformer):
-        #     overloaded = []
-        #     if 'trafo' in net and net.trafo is not None:
-        #         for idx, res in net.res_trafo.iterrows():
-        #             val = transform_loading(res["loading_percent"])
-        #             if all_real_numbers(net.res_trafo['loading_percent'].tolist()) == False:
-        #                 if val is not None and not (isinstance(val, float) and math.isnan(val)) and val > max_loading_capacity_transformer:
-        #                     overloaded.append(idx)
-        #             else:
-        #                 if val >= max_loading_capacity_transformer:
-        #                     overloaded.append(idx)
-        #     return overloaded
-        
-        # def overloaded_transformer1(net):
-        #     overloaded = []
-        #     if 'trafo' not in net and net.trafo is None:
-        #         return overloaded
-                
-        #     loadings = transform_loading(net.res_trafo["loading_percent"])
-        #     real_check = all_real_numbers(net.res_trafo["loading_percent"].tolist())
-        
-        #     for idx, (res, loading_val) in enumerate(zip(net.res_trafo.itertuples(), loadings)):
-        #         # grab this transformer’s own max
-        #         own_max = net.trafo.at[idx, "max_loading_percent"]
-        #         # print(f"max transformer capacity @ id {id} is {own_max}.")
-        
-        #         if not real_check:
-        #             if loading_val is not None and not (isinstance(loading_val, float) and math.isnan(loading_val)) and loading_val >= own_max:
-        #                 overloaded.append(idx)
-        #         else:
-        #             if loading_val > own_max:
-        #                 overloaded.append(idx)
-        #     return overloaded
-        
-
-
-        # ------------------------------------------------------------------- #
-        # 2.  hourly simulation
-        # ------------------------------------------------------------------- #
-        for hr in range(num_hours):
-            # reset all branches each hour (they’ll be taken out again below)
-            net.line["in_service"] = True
-            if df_trafo is not None:
-                net.trafo["in_service"] = True
-
-            # take forecasted lines/trafos out of service
-            for fbus, tbus, start_hr in line_outages:
-                if hr < start_hr:
+                    if net.res_gen["p_mw"].isnull().any():
+                        gen_per_hour_bau.append([None] * len(net.res_gen))
+                    else:
+                        hourly_gen = net.res_gen["p_mw"].tolist()
+                        gen_per_hour_bau.append(hourly_gen)
                     continue
-                is_tf = check_bus_pair(df_line, df_trafo, (fbus, tbus))
+                else:
+                    while ((overloaded_lines(net) or overloaded_transformer_colab(net)) and
+                           not all_loads_zero_flag):
+        
+                        for crit in sorted(net.load["criticality"].dropna().unique(), reverse=True):
+                            for ld_idx in net.load[net.load["criticality"] == crit].index:
+                                if (not overloaded_lines(net)) and (not overloaded_transformer_colab(net)):
+                                    break
+        
+                                bus = net.load.at[ld_idx, "bus"]
+                                dp, dq = fixed_shed_p[bus], fixed_shed_q[bus]
+                                net.load.at[ld_idx, "p_mw"]  -= dp
+                                net.load.at[ld_idx, "q_mvar"]-= dq
+        
+                                shedding_buses.append((hour, int(bus)))
+                                cumulative_load_shedding[bus]["p_mw"]  += dp
+                                cumulative_load_shedding[bus]["q_mvar"]+= dq
+                                hourly_shed_bau[hour]                  += dp
+        
+                                try:
+                                    pp.runopp(net)
+                                    business_as_usuall_cost[hour] = net.res_cost if net.OPF_converged else business_as_usuall_cost[hour]
+                                    if net.OPF_converged:
+                                        pf_loading = transform_loading(net.res_line["loading_percent"])
+                                        if "Transformer Parameters" in xls.sheet_names:
+                                            pf_loading.extend(transform_loading(net.res_trafo["loading_percent"]))
+                                        if all_real_numbers(pf_loading):
+                                            all_loads_zero_flag = True
+                                    business_as_usuall_cost[hour] = net.res_cost       
+                                except:
+                                    pp.runpp(net)
+                                
+                                # if this load has now gone negative, slam to zero
+                                if net.load.at[ld_idx, "p_mw"] - dp < 0:
+                                    all_loads_zero_flag = True
+                                    business_as_usuall_cost[hour] = 0
+                                    
+                                    remaining_p = net.load.loc[net.load["bus"] == bus, "p_mw"].sum()
+                                    remaining_q = net.load.loc[net.load["bus"] == bus, "q_mvar"].sum()
+                                    cumulative_load_shedding[bus]["p_mw"]  += remaining_p
+                                    cumulative_load_shedding[bus]["q_mvar"]+= remaining_q
+                                    hourly_shed_bau[hour] += sum(net.load["p_mw"])
+                                    
+                                    for i in range(len(net.load)):
+                                        net.load.at[i, 'p_mw'] = 0
+                                        net.load.at[i, 'q_mvar'] = 0
+                                    break
+
+                    # record final served, gen, slack
+                    if net.load["p_mw"].isnull().any():
+                        served_load_per_hour.append([None] * len(net.load))
+                    else:
+                        hourly_loads = net.load["p_mw"].tolist()
+                        served_load_per_hour.append(hourly_loads)
+
+                    
+                    if (net.res_gen["p_mw"].isnull().any()) or (business_as_usuall_cost[hour] == 0):
+                        gen_per_hour_bau.append([None]*len(net.res_gen))
+                        slack_per_hour_bau.append(None)
+                    else:
+                        hourly_gen = net.res_gen["p_mw"].tolist()
+                        gen_per_hour_bau.append(net.res_gen["p_mw"].tolist())
+                        slack_per_hour_bau.append(float(net.res_ext_grid.at[0, "p_mw"]))
+        
+            # ----------------------------------------------------------------------
+            # 7. Build Day-End Summary table  (instead of prints)
+            # ----------------------------------------------------------------------
+            summary_rows = []
+            for bus, shed in cumulative_load_shedding.items():
+                total = total_demand_per_bus.get(bus, {"p_mw": 0.0, "q_mvar": 0.0})
+                summary_rows.append({
+                    "bus": bus,
+                    "load shedding (MWh)":  shed["p_mw"],
+                    "load shedding (MVARh)":shed["q_mvar"],
+                    "total demand (MWh)":   total["p_mw"],
+                    "total demand (MVARh)": total["q_mvar"]
+                })
+            day_end_df = pd.DataFrame(summary_rows)
+        
+            # ----------------------------------------------------------------------
+            # 8. Build Hourly Generation Cost table
+            # ----------------------------------------------------------------------
+            hourly_cost_df = pd.DataFrame({
+                "hour": list(range(len(business_as_usuall_cost))),
+                "Current OPF Generation Cost (PKR)": business_as_usuall_cost
+            })
+        
+            # ----------------------------------------------------------------------
+            # 9. Return everything Colab returned *plus* the two DataFrames
+            # ----------------------------------------------------------------------
+            return (loading_percent_bau, served_load_per_hour, gen_per_hour_bau,
+                    slack_per_hour_bau, loading_records, business_as_usuall_cost,
+                    hourly_shed_bau, seen_buses, shedding_buses, df_lines, df_trafo,
+                    load_df, line_idx_map, trafo_idx_map, gdf,
+                    day_end_df, hourly_cost_df)
+
+    
+        # build the outage list first
+        line_outages = generate_line_outages(
+            outage_hours   = st.session_state["outage_hours"],
+            line_down      = st.session_state["line_down"],
+            risk_scores    = st.session_state["risk_scores"],
+            capped_contingency_mode = cap_flag
+        )
+        st.session_state.line_outages = line_outages 
+    
+        # store globally for helper functions
+        globals()["line_outages"] = line_outages
+    
+        with st.spinner("Running OPF …"):
+            (_lp_bau, _served, _gen, _slack, _rec, _cost,
+             _shed, _seen, _shed_buses, _df_lines, _df_trafo,
+             _load_df, _line_idx_map, _trafo_idx_map, _gdf,
+             day_end_df, hourly_cost_df) = current_opf(line_outages)
+
+        # -----------------------------------------------------------------
+        # CACHE RESULTS so they persist across page switches
+        # -----------------------------------------------------------------
+        # 2-C · WRITE ALL RESULTS TO SESSION STATE  ←── only here!
+        st.session_state.update({
+            "bau_ready":                        True,
+            "bau_day_end_df":                   day_end_df,
+            "bau_hourly_cost_df":               hourly_cost_df,
+            "bau_results": {
+                "loading_percent_bau": _lp_bau,
+                "shedding_buses":      _shed_buses,
+            },
+            "hourly_shed_bau":     _shed,   
+            "served_load_per_hour_bau": _served,
+            "gen_per_hour_bau":    _gen,        
+            "slack_per_hour_bau":        _slack,   
+            "line_idx_map":                     _line_idx_map,
+            "trafo_idx_map":                    _trafo_idx_map,
+            "max_loading_capacity":             _df_lines["max_loading_percent"].max(),
+        })
+        # if _df_trafo is not None and not _df_trafo.empty:
+        #     st.session_state.max_loading_capacity_transformer = (
+        #         _df_trafo["max_loading_percent"].max()
+        #     )
+
+        if isinstance(_df_trafo, pd.DataFrame) and not _df_trafo.empty:
+            st.session_state.max_loading_capacity_transformer = (
+                _df_trafo["max_loading_percent"].max()
+            )
+        else:      # no transformers → fall back to the line limit
+            st.session_state.max_loading_capacity_transformer = (
+                st.session_state.max_loading_capacity
+            )
+
+    
+        # -----------------------------------------------------------------
+    
+        # st.subheader("Day-End Summary")
+        # st.dataframe(day_end_df, use_container_width=True)
+    
+        # st.subheader("Hourly Generation Cost")
+        # st.dataframe(hourly_cost_df, use_container_width=True)
+
+        # ────────────────────────────────────────────────────────────────
+        # Show cached tables even after you left the page
+        # ────────────────────────────────────────────────────────────────
+      # ░░ 3 · ALWAYS-VISIBLE OUTPUT (tables + map) ░░
+    if st.session_state.bau_ready:
+
+        # 3-A · Summary tables
+        st.subheader("Day-End Summary")
+        st.dataframe(st.session_state.bau_day_end_df, use_container_width=True)
+
+        st.subheader("Hourly Generation Cost")
+        st.dataframe(st.session_state.bau_hourly_cost_df, use_container_width=True)
+
+        # 3-B · Hour picker  – value is *index*, label is pretty text
+        num_hours = len(st.session_state.network_data['df_load_profile'])
+        
+        # --- make sure the value is an int (first run after page reload) ------------
+        if isinstance(st.session_state.bau_hour, str):
+            try:
+                st.session_state.bau_hour = int(st.session_state.bau_hour.split()[-1])
+            except Exception:
+                st.session_state.bau_hour = 0
+        # ----------------------------------------------------------------------------
+        
+        st.selectbox(
+            "Select Hour to Visualize",
+            options=list(range(num_hours)),          # real values (ints)
+            format_func=lambda i: f"Hour {i}",       # pretty label
+            key="bau_hour",                          # stored as int
+            help="Choose any hour; the map refreshes automatically.",
+        )
+
+        # 3-C · Build the map for that hour
+        hr           = st.session_state.bau_hour
+        df_line      = st.session_state.network_data['df_line'].copy()
+        df_load      = st.session_state.network_data['df_load'].copy()
+        df_trafo     = st.session_state.network_data.get('df_trafo')
+        loading_rec  = st.session_state.bau_results['loading_percent_bau'][hr]
+        shed_buses   = st.session_state.bau_results['shedding_buses']
+        line_idx_map = st.session_state.line_idx_map
+        trafo_idx_map= st.session_state.trafo_idx_map
+        outages      = st.session_state.line_outages
+
+        # ── helper colour fns (same logic) ─────────────────────
+        def get_color(pct, max_cap):
+            if pct is None:                return '#FF0000'
+            if pct == 0:                   return '#000000'
+            if pct <= 0.75*max_cap:        return '#00FF00'
+            if pct <= 0.90*max_cap:        return '#FFFF00'
+            if pct <  max_cap:             return '#FFA500'
+            return '#FF0000'
+        get_color_trafo = get_color
+
+        # distinguish line vs trafo
+        def check_bus_pair_df(df_line, df_trafo, pair):
+            fbus, tbus = pair
+            if df_trafo is not None:
+                if (((df_trafo["hv_bus"] == fbus) & (df_trafo["lv_bus"] == tbus)) |
+                    ((df_trafo["hv_bus"] == tbus) & (df_trafo["lv_bus"] == fbus))).any():
+                    return True
+            if (((df_line["from_bus"] == fbus) & (df_line["to_bus"] == tbus)) |
+                ((df_line["from_bus"] == tbus) & (df_line["to_bus"] == fbus))).any():
+                return False
+            return None
+
+        # GeoDataFrame for lines
+        df_line["geodata"] = df_line["geodata"].apply(
+            lambda x: [(lon, lat) for lat, lon in eval(x)] if isinstance(x, str) else x
+        )
+        gdf = gpd.GeoDataFrame(
+            df_line,
+            geometry=[LineString(c) for c in df_line["geodata"]],
+            crs="EPSG:4326",
+        )
+        gdf["idx"]     = gdf.index
+        gdf["loading"] = gdf["idx"].map(lambda i: loading_rec[i] if i < len(loading_rec) else 0.0)
+
+        # mark weather-down equipment
+        weather_down = set()
+        for fbus, tbus, start_hr in outages:
+            if hr >= start_hr:
+                is_tf = check_bus_pair_df(df_line, df_trafo, (fbus, tbus))
                 if is_tf:
-                    mask = (
-                        ((net.trafo.hv_bus == fbus) & (net.trafo.lv_bus == tbus)) |
-                        ((net.trafo.hv_bus == tbus) & (net.trafo.lv_bus == fbus))
-                    )
-                    net.trafo.loc[mask, "in_service"] = False
+                    idx = trafo_idx_map.get((fbus, tbus))
+                    if idx is not None:
+                        weather_down.add(idx + len(df_line))
                 else:
                     idx = line_idx_map.get((fbus, tbus))
                     if idx is not None:
-                        net.line.at[idx, "in_service"] = False
+                        weather_down.add(idx)
+        gdf["down_weather"] = gdf["idx"].isin(weather_down)
 
-            # update load & gen profiles for this hour -----------------------
-            for idx in net.load.index:
-                bus           = net.load.at[idx, "bus"]
-                if bus in load_dyn:
-                    net.load.at[idx, "p_mw"]   = df_load_profile.at[hr, load_dyn[bus]["p"]]
-                    net.load.at[idx, "q_mvar"] = df_load_profile.at[hr, load_dyn[bus]["q"]]
-            for idx in net.gen.index:
-                bus = net.gen.at[idx, "bus"]
-                if bus in gen_dyn:
-                    net.gen.at[idx, "p_mw"] = df_gen_profile.at[hr, gen_dyn[bus]]
-                        
-            # Update criticality
-            criticality_map = dict(zip(df_load["bus"], df_load["criticality"]))
-            net.load["bus"] = net.load["bus"].astype(int)
-            net.load["criticality"] = net.load["bus"].map(criticality_map)                        
+        # Folium map
+        m = folium.Map(location=[27, 66.5], zoom_start=6, width=800, height=600)
+        max_line_cap = st.session_state.max_loading_capacity
+        max_trf_cap  = st.session_state.get("max_loading_capacity_transformer", max_line_cap)
+        no_of_lines  = len(df_line)
 
-            # run PF first ---------------------------------------------------
-            try:
-                pp.runpp(net)
-            except Exception:
-                # network unsolvable even before optimisation
-                loading_percent_wa.append([None]* (len(net.line)+len(net.trafo or [])))
-                serving_per_hour.append([None]*len(net.load))
-                gen_per_hour.append([None]*len(net.res_gen))
-                slack_per_hour.append(None)
-                continue
+        def style_fn(feat):
+            p = feat["properties"]
+            if p.get("down_weather", False):
+                return {"color": "#000000", "weight": 3}
+            pct = p.get("loading", 0.0)
+            colour = (get_color_trafo(pct, max_trf_cap)
+                      if df_trafo is not None and p["idx"] >= no_of_lines
+                      else get_color(pct, max_line_cap))
+            return {"color": colour, "weight": 3}
 
-            # helper to push line+trafo loading list -------------------------
-            def record_loadings():
-                vals = transform_loading(net.res_line.loading_percent)
-                if df_trafo is not None:
-                    vals.extend(transform_loading(net.res_trafo.loading_percent))
-                loading_percent_wa.append(vals)
+        folium.GeoJson(gdf.__geo_interface__, style_function=style_fn,
+                       name=f"Transmission Net – Hour {hr}").add_to(m)
 
-            # if no overload – keep PF result
-            if (overloaded_lines(net, max_line_cap)==[] and
-                overloaded_transformer(net, max_trf_cap)==[] and
-                all_real_numbers(transform_loading(net.res_line.loading_percent))):
-                record_loadings()
-                serving_per_hour.append(net.load.p_mw.tolist())
-                gen_per_hour.append(net.res_gen.p_mw.tolist())
-                slack_per_hour.append(float(net.res_ext_grid.at[0,"p_mw"]))
-                continue
+        # load circles
+        shed_now = [b for (h, b) in shed_buses if h == hr]
+        for _, row in df_load.iterrows():
+            bus = row["bus"]
+            lat, lon = ast.literal_eval(row["load_coordinates"])
+            col = "red" if bus in shed_now else "green"
+            folium.Circle((lat, lon), radius=20000,
+                          color=col, fill_color=col, fill_opacity=0.5).add_to(m)
 
-            # attempt OPF first ---------------------------------------------
-            try:
-                pp.runopp(net)
-                # if (overloaded_lines1(net)==[] and and overloaded_transformer1(net)==[]):
-                #         wa_cost[hr] = net.res_cost
-                #         all_loads_zero_flag = 0
-                if net.OPF_converged:
-                    record_loadings()
-                    wa_cost[hr] = net.res_cost    
-                    serving_per_hour.append(net.load.p_mw.tolist())
-                    gen_per_hour.append(net.res_gen.p_mw.tolist())
-                    slack_per_hour.append(float(net.res_ext_grid.at[0,"p_mw"]))
-                    continue
-                        
-                    
-            #     overloaded_transformer(net, max_trf_cap)==[]
-            #     if net.OPF_converged:
-            #         record_loadings()
-            #         wa_cost[hr] = net.res_cost
-            #         serving_per_hour.append(net.load.p_mw.tolist())
-            #         gen_per_hour.append(net.res_gen.p_mw.tolist())
-            #         slack_per_hour.append(float(net.res_ext_grid.at[0,"p_mw"]))
-            #         continue
-            except Exception:
-                pass  # fall‑through to load‑shedding loop
+         # ---------- legend (replace the whole legend_html string) ------------------
+        legend_html = """
+        <style>
+          .legend-box,* .legend-box { color:#000 !important; }
+        </style>
+        
+        <div class="legend-box leaflet-control leaflet-bar"
+             style="position:absolute; top:150px; left:10px; z-index:9999;
+                    background:#ffffff; padding:8px; border:1px solid #ccc;
+                    font-size:14px; max-width:210px;">
+          <strong>Line Load Level&nbsp;(&#37; of Max)</strong><br>
+          <span style='display:inline-block;width:12px;height:12px;background:#00FF00;'></span>&nbsp;Below&nbsp;75&nbsp;%<br>
+          <span style='display:inline-block;width:12px;height:12px;background:#FFFF00;'></span>&nbsp;75–90&nbsp;%<br>
+          <span style='display:inline-block;width:12px;height:12px;background:#FFA500;'></span>&nbsp;90–100&nbsp;%<br>
+          <span style='display:inline-block;width:12px;height:12px;background:#FF0000;'></span>&nbsp;Overloaded&nbsp;>&nbsp;100&nbsp;%<br>
+          <span style='display:inline-block;width:12px;height:12px;background:#000000;'></span>&nbsp;Weather‑Impacted<br><br>
+        
+          <strong>Load Status</strong><br>
+          <span style='display:inline-block;width:12px;height:12px;background:#008000;border-radius:50%;'></span>&nbsp;Fully Served<br>
+          <span style='display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;'></span>&nbsp;Not Fully Served
+        </div>
+        """
+        m.get_root().html.add_child(folium.Element(legend_html))
 
-           # if (all_real_numbers(transform_loading((net.res_line['loading_percent'])+(net.res_trafo['loading_percent']))) and overloaded_lines(net)==[] and overloaded_transformer(net)==[]):
-           #          wa_cost[hr] = net.res_cost
-           #  else:
-            #  load‑shedding loop -------------------------------------------
-            while (overloaded_lines(net, max_line_cap) or
-                   overloaded_transformer(net, max_trf_cap)):
-                for crit in sorted(net.load.criticality.dropna().unique(), reverse=True):
-                    for ld_idx in net.load[net.load.criticality==crit].index:
-                        if not overloaded_lines(net, max_line_cap) and \
-                           not overloaded_transformer(net, max_trf_cap):
-                            break
-                        val   = max_trf_cap if df_trafo is not None else max_line_cap
-                        red_f = ((1/500)*val - .1)/2
-                        dp    = red_f * net.load.at[ld_idx, "p_mw"]
-                        dq    = red_f * net.load.at[ld_idx, "q_mvar"]
-                        bus   = int(net.load.at[ld_idx, "bus"])
-                        net.load.at[ld_idx, "p_mw"] -= dp
-                        net.load.at[ld_idx, "q_mvar"] -= dq
-                        cumulative_shed[bus]["p_mw"] += dp
-                        cumulative_shed[bus]["q_mvar"] += dq
-                        hourly_shed[hr]                += dp
-                        shedding_buses.append((hr, bus))
-                    # try OPF / PF again
-                    try:
-                        pp.runopp(net)
-                    except Exception:
-                        pp.runpp(net)
+        # ---------------- title (overwrite your title_html string) -----------------
+        title_html = f"""
+        <style>
+          .map-title {{ color:#000 !important; }}
+        </style>
+        
+        <div class="map-title leaflet-control leaflet-bar"
+             style="position:absolute; top:90px; left:10px; z-index:9999;
+                    background:rgba(255,255,255,0.9); padding:4px;
+                    font-size:18px; font-weight:bold;">
+          Projected Operation - Under Current OPF – Hour {hr}
+        </div>
+        """
+        m.get_root().html.add_child(folium.Element(title_html))
 
-            # record final state after shedding -----------------------------
-            record_loadings()
-            wa_cost[hr] = net.res_cost if net.OPF_converged else wa_cost[hr-1]
-            loading_percent_wa[hr] = loading_percent_wa[hr] if net.OPF_converged else loading_percent_wa[hr-1]
-            serving_per_hour.append(net.load.p_mw.tolist())
-            gen_per_hour.append(net.res_gen.p_mw.tolist())
-            slack_per_hour.append(float(net.res_ext_grid.at[0,"p_mw"]))
+        folium.LayerControl(collapsed=False).add_to(m)
 
-        # ------------------------------------------------------------------ #
-        # 3.   store results in session‑state
-        # ------------------------------------------------------------------ #
-        st.session_state.weather_aware_results = dict(
-            cost               = wa_cost,
-            cumulative_shed    = cumulative_shed,
-            hourly_shed        = hourly_shed,
-            loading_percent    = loading_percent_wa,
-            served_load        = serving_per_hour,
-            gen_per_hour       = gen_per_hour,
-            slack_per_hour     = slack_per_hour,
-            shedding_buses     = shedding_buses,
+        # display
+        st.write(f"### Network Loading Visualization – Hour {hr}")
+        st_folium(m, width=800, height=600, key=f"bau_map_{hr}")
+
+        
+        # folium.LayerControl(collapsed=False).add_to(m)
+
+        # st.write(f"### Network Loading Visualization – Hour {hr}")
+        # st_folium(m, width=800, height=600, key=f"bau_map_{hr}")
+# ────────────────────────────────────────────────────────────────────────────
+# Page 4 :  Weather‑Aware System
+# ────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Page-4  :  Projected Operation – Under Weather-Risk-Aware OPF
+# ─────────────────────────────────────────────────────────────────────────────
+elif selection == "Projected Operation - Under Weather Risk Aware OPF":
+    st.title("Projected Operation – Under Weather-Risk-Aware OPF")
+     # 🚦 NEW – make sure the cache from Page 3 exists
+    if not st.session_state.get("bau_ready", False):
+        st.info(
+            "Please run **Projected Operation – Under Current OPF** first.  "
+            "When it finishes you can return here and run the Weather-Aware analysis."
         )
-        st.success("Weather‑Aware simulation finished.")
 
+    # ── 0 · SESSION  STATE  SLOTS  (create once) ────────────────────────────
+    for k, v in (
+        ("wa_ready",                       False),
+        ("wa_day_end_df",                  None),
+        ("wa_hourly_cost_df",              None),
+    ):
+        st.session_state.setdefault(k, v)
+    # -----------------------------------------------------------------------
 
-    # ---------------------------------------------------------------------- #
-    # 4.  show summary tables if we have results
-    # ---------------------------------------------------------------------- #
-    if "weather_aware_results" in st.session_state:
-        wa_res   = st.session_state.weather_aware_results
-        bau_cost = st.session_state.bau_results["business_as_usual_cost"]
+    # ── 1 · UI  – contingency mode picker + button ─────────────────────────
+    mode = st.selectbox(
+        "Select Contingency Mode",
+        ["Capped Contingency Mode", "Maximum Contingency Mode"],
+    )
+    cap_flag = (mode == "Capped Contingency Mode")
 
-        st.subheader("Day‑End Summary (Weather‑Risk Aware OPF)")
+    if st.button("Run Weather-Aware Analysis"):
 
-        # load‑shedding per bus --------------------------------------------
-        shed_tbl = []
-        for bus, shed in wa_res["cumulative_shed"].items():
-            total_d = st.session_state.bau_results["total_demand_per_bus"].get(bus, {"p_mw":0,"q_mvar":0})
-            shed_tbl.append(dict(
-                Bus                 = bus,
-                **{ "Load Shed (MWh)": round(shed["p_mw"],2),
-                   "Load Shed (MVARh)": round(shed["q_mvar"],2),
-                   "Total Demand (MWh)": round(total_d["p_mw"],2),
-                   "Total Demand (MVARh)": round(total_d["q_mvar"],2)}
-            ))
-        st.dataframe(pd.DataFrame(shed_tbl), use_container_width=True)
-
-        # hourly gen cost ---------------------------------------------------
-        cost_tbl = pd.DataFrame({
-            "Hour"                      : list(range(num_hours)),
-            "Weather Risk Aware OPF Cost (PKR)"  : [round(c,2) for c in wa_res["cost"]],
-            "Under Current OPF Cost (PKR)"            : [round(c,2) for c in bau_cost],
-            "Δ Cost (WA – Current OPF)"         : [round(w-b,2) for w,b in zip(wa_res["cost"], bau_cost)],
-        })
-        st.write("### Hourly Generation Cost Comparison")
-        st.dataframe(cost_tbl, use_container_width=True)
-
-        # ------------------------------------------------------------------ #
-        # 5.  interactive map – structure parallels BAU visualiser
-        # ------------------------------------------------------------------ #
-        if "wa_vis_hour" not in st.session_state:
-            st.session_state.wa_vis_hour = None
-
-        hr_label = st.selectbox(
-            "Select Hour to Visualize (Weather‑Risk Aware)",
-            [f"Hour {i}" for i in range(num_hours)]
+        # -------------------------------------------------------------------
+        # 1-A · Build the outage list exactly like Page-3
+        # -------------------------------------------------------------------
+        line_outages = generate_line_outages(
+            outage_hours   = st.session_state["outage_hours"],
+            line_down      = st.session_state["line_down"],
+            risk_scores    = st.session_state["risk_scores"],
+            capped_contingency_mode = cap_flag,
         )
-        want_hr  = int(hr_label.split()[-1])
+        st.session_state.line_outages = line_outages        # (re-use later)
 
-        if st.button("Generate Weather Aware Visualization"):
-            st.session_state.wa_vis_hour = want_hr
+         # ---------------------------------------------------------------------------
+        # Aliases so the Colab names still resolve
+        # ---------------------------------------------------------------------------
+        def Network_initialize():
+            return network_initialize(path)          # <— your global helper
+        
+        def overloaded_transformer_colab(net):
+            # keep original single-arg call signature
+            return overloaded_transformer(net, path, line_outages)
+        # ---------------------------------------------------------------------------
 
-        if st.session_state.wa_vis_hour is not None:
-            h = st.session_state.wa_vis_hour
-            # --- pull branch‑index maps from session‑state ------------------------
-            line_idx_map  = st.session_state.get("line_idx_map", {})
-            trafo_idx_map = st.session_state.get("trafo_idx_map", {})
-            loadings     = wa_res["loading_percent"][h]
-            shed_buses_h = [b for t,b in wa_res["shedding_buses"] if t==h]
+        
+        # —— helper so existing single-arg calls still work ——
+        def overloaded_transformer_local(net_):
+            return overloaded_transformer(net_, path, line_outages)
+        
 
-            # -----------------------------------------------------------------
-            # make sure the capacity limits are in scope *before* helpers exist
-            # -----------------------------------------------------------------
-            max_line_cap = st.session_state.get("max_loading_capacity", 100.0)
-            max_trf_cap  = st.session_state.get(
-                               "max_loading_capacity_transformer", max_line_cap)
-            # rebuild gdf like we did in BAU visualiser ---------------------
-            df_line["geodata"] = df_line.geodata.apply(
-                lambda x: [(lo,la) for la,lo in eval(x)] if isinstance(x,str) else x
+        # -------------------------------------------------------------------
+        # 1-B · DEFINE  weather_opf()   (same maths – no prints)
+        # -------------------------------------------------------------------
+        # ─────────────────────────────────────────────────────────────────────────────
+        # WEATHER-AWARE OPF  – Streamlit friendly (no prints, returns DataFrames)
+        # ─────────────────────────────────────────────────────────────────────────────
+        def weather_opf(line_outages):
+            # -----------------------------------------
+            # 2. Initialization & data load
+            # -----------------------------------------
+            path = st.session_state.get("uploaded_file")      # BytesIO object
+            xls  = pd.ExcelFile(path)                         # gives .sheet_names
+            # ==== NEW – baseline cost frozen by Page 3 =========================
+            business_as_usuall_cost = (
+                st.session_state.bau_hourly_cost_df
+                ["Current OPF Generation Cost (PKR)"]
+                .tolist()
+            )
+            # make a working copy we can edit freely
+            weather_aware_cost = business_as_usuall_cost.copy()
+            # —— helper so existing single-arg calls still work ——
+            def overloaded_transformer_local(net_):
+                return overloaded_transformer(net_, path, line_outages)
+
+            df_trafo = []
+            if "Transformer Parameters" in xls.sheet_names:
+                (net, df_bus, df_slack, df_line, num_hours,
+                 load_dynamic, gen_dynamic,
+                 df_load_profile, df_gen_profile,
+                 df_trafo) = Network_initialize()
+            else:
+                (net, df_bus, df_slack, df_line, num_hours,
+                 load_dynamic, gen_dynamic,
+                 df_load_profile, df_gen_profile) = Network_initialize()
+        
+            # BAU and weather-aware cost arrays
+            # business_as_usuall_cost = calculating_hourly_cost(path)
+            weather_aware_cost      = business_as_usuall_cost.copy()
+        
+            # Build GeoDataFrame of lines
+            df_lines = df_line.copy()
+            df_lines["geodata"] = df_lines["geodata"].apply(
+                lambda x: [(lon, lat) for lat, lon in eval(x)] if isinstance(x, str) else x
             )
             gdf = gpd.GeoDataFrame(
-                df_line,
-                geometry=[LineString(c) for c in df_line.geodata],
-                crs="EPSG:4326"
+                df_lines,
+                geometry=[LineString(coords) for coords in df_lines["geodata"]],
+                crs="EPSG:4326",
             )
-            no_of_lines = len(df_line) if df_trafo is None else len(df_line) - len(df_trafo)
-            gdf["idx"]     = gdf.index
-            gdf["loading"] = gdf["idx"].map(lambda i: loadings[i] if i < len(loadings) else 0.)
-            weather_down = {
-            ( trafo_idx_map.get((f, t)) + no_of_lines if check_bus_pair(df_line, df_trafo, (f, t))
-              else line_idx_map.get((f, t)) )
-            for f, t, s in line_outages
-            if h >= s
+        
+            # Bidirectional line & trafo index maps
+            line_idx_map = {(r["from_bus"], r["to_bus"]): i for i, r in net.line.iterrows()}
+            line_idx_map.update({(r["to_bus"], r["from_bus"]): i for i, r in net.line.iterrows()})
+        
+            trafo_idx_map = {}
+            if "Transformer Parameters" in xls.sheet_names:
+                trafo_idx_map = {(r["hv_bus"], r["lv_bus"]): i for i, r in net.trafo.iterrows()}
+                trafo_idx_map.update({(r["lv_bus"], r["hv_bus"]): i for i, r in net.trafo.iterrows()})
+        
+            net.load["bus"] = net.load["bus"].astype(int)
+        
+            # Containers (names identical to Colab)
+            loading_records           = [0] * num_hours
+            shedding_buses            = []
+            seen_buses                = set()
+            served_load_per_hour_wa   = []
+            loading_percent_wa        = []
+            gen_per_hour_wa           = []
+            slack_per_hour_wa         = []
+            planned_slack_per_hour    = []
+            hourly_shed_weather_aware = [0] * num_hours
+        
+            cumulative_load_shedding = {
+                b: {"p_mw": 0.0, "q_mvar": 0.0} for b in net.load["bus"].unique()
             }
-            weather_down.discard(None)
-            gdf["down_weather"] = gdf.idx.isin(weather_down)
+        
+            # Total daily demand per bus (unchanged)
+            total_demand_per_bus = {}
+            p_cols = [c for c in df_load_profile.columns if c.startswith("p_mw_bus_")]
+            q_cols = [c for c in df_load_profile.columns if c.startswith("q_mvar_bus_")]
+            
+            for bus in set(int(c.rsplit("_", 1)[1]) for c in p_cols):
+                total_demand_per_bus[bus] = {
+                    "p_mw": float(df_load_profile[f"p_mw_bus_{bus}"].sum()),
+                    "q_mvar": float(df_load_profile[f"q_mvar_bus_{bus}"].sum()),
+                }
+        
+            # ---------- fixed 20 % shedding per bus (same calc) -------------------
+            # Before your hourly loop, record initial loads ---
+            initial_load_p = {}   # real power
+            initial_load_q = {}   # reactive
+        
+            for idx in net.load.index:
+                bus = int(net.load.at[idx, "bus"])
+                # capture whatever the initial profile set at that hour
+                initial_load_p[bus] = net.load.at[idx, "p_mw"]
+                initial_load_q[bus] = net.load.at[idx, "q_mvar"]
+        
+            # Precompute the fixed shedding per bus
+            shed_pct = 0.20   # 0.05 --> 5% and 0.1 --> 10% Load Shedding
+            fixed_shed_p = {bus: shed_pct * p for bus, p in initial_load_p.items()}
+            fixed_shed_q = {bus: shed_pct * q for bus, q in initial_load_q.items()}
+        
+            # -----------------------------------------
+            # 3. Hourly simulation: PF → conditional OPF → record
+            # -----------------------------------------
+            for hour in range(num_hours):
+        
+                # 3.1  scheduled outages
+                for fbus, tbus, start_hr in line_outages:
+                    if hour < start_hr:
+                        continue
+                    is_trafo = check_bus_pair(path, (fbus, tbus))
+                    if is_trafo == True:
+                        mask_tf = (((net.trafo.hv_bus == fbus) & (net.trafo.lv_bus == tbus)) |
+                                ((net.trafo.hv_bus == tbus) & (net.trafo.lv_bus == fbus)))
+                        if not mask_tf.any():
+                            pass
+                        else:
+                            for tf_idx in net.trafo[mask_tf].index:
+                                net.trafo.at[tf_idx, "in_service"] = False
+                    else:
+                        idx = line_idx_map.get((fbus, tbus))
+                        if idx is not None:
+                            net.line.at[idx, "in_service"] = False
+        
+                # 3.2  load profiles for this hour
+                for idx in net.load.index:
+                    b = net.load.at[idx, "bus"]
+                    if b in load_dynamic:
+                        net.load.at[idx, "p_mw"]   = df_load_profile.at[hour, load_dynamic[b]["p"]]
+                        net.load.at[idx, "q_mvar"] = df_load_profile.at[hour, load_dynamic[b]["q"]]
+        
+                # update criticality each hour
+                # crit_map = pd.read_excel(path, sheet_name="Load Parameters",
+                #                          index_col=0)["criticality"].to_dict()
+                # net.load["bus"] = net.load["bus"].astype(int)
+                # net.load["criticality"] = net.load.bus.map(crit_map)
 
-            # Folium map ----------------------------------------------------
-            m = folium.Map(location=[27,66.5], zoom_start=7, width=800, height=600)
-
-            # ---------------------------------------------------------------------------
-            # helper: always work with a *scalar* float (or None)
-            # ---------------------------------------------------------------------------
-            def _first(x):
-                """Return a plain float/None even if x is list‑like."""
-                if isinstance(x, (list, tuple)) and len(x):
-                    return x[0]
-                try:                       # NumPy scalar → Python float
-                    import numpy as np
-                    if isinstance(x, np.generic):
-                        return float(x)
-                except ImportError:
+                df_load_params = pd.read_excel(path, sheet_name="Load Parameters", index_col=0)
+                crit_map = dict(zip(df_load_params["bus"], df_load_params["criticality"]))
+                net.load["bus"] = net.load["bus"].astype(int)
+                net.load["criticality"] = net.load["bus"].map(crit_map)
+        
+                # 3.3  PV gen profile
+                planned_gen_output = {}
+                for idx in net.gen.index:
+                    b = net.gen.at[idx, "bus"]
+                    if b in gen_dynamic:
+                        p = df_gen_profile.at[hour, gen_dynamic[b]]
+                        net.gen.at[idx, "p_mw"] = p
+                        planned_gen_output[idx] = p
+        
+                # 3.4  initial power-flow
+                try:
+                    pp.runpp(net)
+                except:  # PF failed  → treat as overload
                     pass
-                return x                   # already scalar or None
-            
-            
-            # colour helpers that match the BAU page but are list‑safe
-            def col_line(p):
-                p = _first(p)
-                if p is None or p == 0:            return '#000000'
-                if p <= 0.75 * max_line_cap:       return '#00FF00'
-                if p <= 0.90 * max_line_cap:       return '#FFFF00'
-                if p <  max_line_cap:              return '#FFA500'
-                return '#FF0000'
-            
-            def col_trf(p):
-                p = _first(p)
-                if p is None or p == 0:            return '#000000'
-                if p <= 0.75 * max_trf_cap:        return '#00FF00'
-                if p <= 0.90 * max_trf_cap:        return '#FFFF00'
-                if p <  max_trf_cap:               return '#FFA500'
-                return '#FF0000'
+        
+                # record PF loading (for later plotting, if needed)
+                # record this hour’s loading_percent Series -------------------
+                        # ---------------- record PF loading -------------------------------
+                intermediate_var = transform_loading(net.res_line["loading_percent"])
+                if "Transformer Parameters" in xls.sheet_names:
+                    intermediate_var.extend(
+                        transform_loading(net.res_trafo["loading_percent"])
+                    )
+                loading_records[hour] = intermediate_var
+        
+                overloads        = overloaded_lines(net)
+                overloads_trafo  = []
+                if "Transformer Parameters" in pd.ExcelFile(path).sheet_names:
+                    overloads_trafo = overloaded_transformer_local(net)
+                all_loads_zero_flag = False
+        
+                # 3.5 Check for overloads
+                if (
+                    (overloads == [])
+                    and (overloads_trafo == [])
+                    and (all_real_numbers(loading_records[hour]) is True)
+                ):
+        
+                    intermediate_cont = transform_loading(net.res_line["loading_percent"])
+                    if "Transformer Parameters" in pd.ExcelFile(path).sheet_names:
+                        intermediate_cont.extend(
+                            transform_loading(net.res_trafo["loading_percent"])
+                        )
+                    loading_percent_wa.append(intermediate_cont)
+        
+                    slack_per_hour_wa.append(float(net.res_ext_grid.at[0, "p_mw"]))
+        
+                    if net.load["p_mw"].isnull().any():
+                        served_load_per_hour_wa.append([None] * len(net.load))
+                    else:
+                        hourly_loads = net.load["p_mw"].tolist()
+                        served_load_per_hour_wa.append(hourly_loads)
+        
+                    if net.res_gen["p_mw"].isnull().any():
+                        gen_per_hour_wa.append([None] * len(net.res_gen))
+                    else:
+                        hourly_gen = net.res_gen["p_mw"].tolist()
+                        gen_per_hour_wa.append(hourly_gen)
+        
+                    planned_slack_per_hour.append(float(net.res_ext_grid.at[0, "p_mw"]))
+                    continue
+        
+                # 3.6 Record planned slack output
+                planned_slack = {}
+                if not net.ext_grid.empty:
+                    for idx in net.ext_grid.index:
+                        pw = "p_mw" if "p_mw" in net.res_ext_grid else "p_kw"
+                        planned_slack[idx] = net.res_ext_grid.at[idx, pw]
+                        planned_slack_per_hour.append(float(net.res_ext_grid.at[0, "p_mw"]))
+        
+                pf_loadings = transform_loading(net.res_line["loading_percent"])
+                if "Transformer Parameters" in pd.ExcelFile(path).sheet_names:
+                    pf_loadings.extend(transform_loading(net.res_trafo["loading_percent"]))
+        
+                try:
+                    pp.runopp(net)
+                    if (overloaded_lines(net) == []) and (overloaded_transformer_local(net) == []):
+                        weather_aware_cost[hour] = net.res_cost
+                        all_loads_zero_flag = True
+                except Exception:
+                    pass
+        
+                if (
+                    all_real_numbers(
+                        transform_loading(
+                            net.res_line["loading_percent"] + net.res_trafo["loading_percent"]
+                        )
+                    )
+                    and (overloaded_lines(net) == [])
+                    and (overloaded_transformer_local(net) == [])
+                ):
+                    weather_aware_cost[hour] = net.res_cost
+                else:
+                    # 3.7 Run OPF to relieve overloads (fallback to shedding)
+                    while (
+                        ((overloaded_lines(net) != [])
+                        or (overloaded_transformer_local(net) != [])
+                    ) and (all_loads_zero_flag == False)):
+        
+                        for crit in sorted(
+                            net.load["criticality"].dropna().unique(), reverse=True
+                        ):
+                            for ld_idx in net.load[net.load["criticality"] == crit].index:
+                                if (overloaded_lines(net) == []) and (
+                                    overloaded_transformer_local(net) == []
+                                ):
+                                    break
+        
+                                bus = net.load.at[ld_idx, "bus"]
+                                dp = fixed_shed_p[bus]
+                                dq = fixed_shed_q[bus]
+        
+                                net.load.at[ld_idx, "p_mw"] -= dp
+                                net.load.at[ld_idx, "q_mvar"] -= dq
+        
+                                shedding_buses.append((hour, int(bus)))
+                                cumulative_load_shedding[bus]["p_mw"] += dp
+                                cumulative_load_shedding[bus]["q_mvar"] += dq
+                                hourly_shed_weather_aware[hour] += dp
+        
+                                try:
+                                    pp.runopp(net)
+                                    weather_aware_cost[hour] = net.res_cost
+                                    if net.OPF_converged:
+                                        pf_loadings = transform_loading(
+                                            net.res_line["loading_percent"]
+                                        )
+                                        if "Transformer Parameters" in pd.ExcelFile(
+                                            path
+                                        ).sheet_names:
+                                            pf_loadings.extend(
+                                                transform_loading(
+                                                    net.res_trafo["loading_percent"]
+                                                )
+                                            )
+                                        if all_real_numbers(pf_loadings):
+                                            all_loads_zero_flag = True
+                                except Exception:
+                                    pp.runpp(net)
+        
+                                # collapse if load goes negative
+                                if net.load.at[ld_idx, "p_mw"] - dp < 0:
+                                    all_loads_zero_flag = True
+                                    weather_aware_cost[hour] = 0
+        
+                                    remaining_p = net.load.loc[
+                                        net.load["bus"] == bus, "p_mw"
+                                    ].sum()
+                                    remaining_q = net.load.loc[
+                                        net.load["bus"] == bus, "q_mvar"
+                                    ].sum()
+                                    cumulative_load_shedding[bus]["p_mw"] += remaining_p
+                                    cumulative_load_shedding[bus]["q_mvar"] += remaining_q
+        
+                                    hourly_shed_weather_aware[hour] = hourly_shed_weather_aware[hour] + sum(net.load['p_mw'])
+                                    for i in range(len(net.load)):
+                                        net.load.at[i, 'p_mw'] = 0
+                                        net.load.at[i, 'q_mvar'] = 0
+                                    break
+        
+                # 3.9 Record post-OPF loadings
+                intermediate_var = transform_loading(net.res_line["loading_percent"])
+                if "Transformer Parameters" in pd.ExcelFile(path).sheet_names:
+                    intermediate_var.extend(
+                        transform_loading(net.res_trafo["loading_percent"])
+                    )
+                loading_records[hour] = intermediate_var
+        
+                intermediate_cont = transform_loading(net.res_line["loading_percent"])
+                if "Transformer Parameters" in pd.ExcelFile(path).sheet_names:
+                    intermediate_cont.extend(
+                        transform_loading(net.res_trafo["loading_percent"])
+                    )
+                loading_percent_wa.append(intermediate_cont)
+        
+                if net.load["p_mw"].isnull().any():
+                    served_load_per_hour_wa.append([None] * len(net.load))
+                else:
+                    hourly_loads = net.load["p_mw"].tolist()
+                    served_load_per_hour_wa.append(hourly_loads)
+        
+                if net.res_gen["p_mw"].isnull().any() or (weather_aware_cost[hour] == 0):
+                    gen_per_hour_wa.append([None] * len(net.res_gen))
+                    slack_per_hour_wa.append(None)
+                else:
+                    hourly_gen = net.res_gen["p_mw"].tolist()
+                    gen_per_hour_wa.append(hourly_gen)
+                    slack_per_hour_wa.append(float(net.res_ext_grid.at[0, "p_mw"]))
+        
+            # 4. Day-end summary tables (no prints)
+            day_end_rows = []
+            for bus, shed in cumulative_load_shedding.items():
+                total = total_demand_per_bus.get(bus, {"p_mw": 0.0, "q_mvar": 0.0})
+                day_end_rows.append(
+                    {
+                        "bus": bus,
+                        "load shedding (MWh)": shed["p_mw"],
+                        "load shedding (MVARh)": shed["q_mvar"],
+                        "total demand (MWh)": total["p_mw"],
+                        "total demand (MVARh)": total["q_mvar"],
+                    }
+                )
+            day_end_df = pd.DataFrame(day_end_rows)
+        
+            # hourly_cost_df = pd.DataFrame(
+            #     {
+            #         "hour": list(range(num_hours)),
+            #         "generation_cost (PKR)": weather_aware_cost,
+            #     }
+            # )
 
-            # ---------------------------------------------------------------------------
-            # Weather‑Aware map‑drawing (unchanged except for the safe helpers above)
-            # ---------------------------------------------------------------------------
-            n_trafos    = len(df_trafo) if df_trafo is not None else 0
-            line_cutoff = len(df_line) - n_trafos                 # idx ≥ cut‑off ⇒ trafo
-            
-            def style_ft(feat):
-                prop = feat["properties"]
-            
-                # black for weather‑impacted
-                if prop.get("down_weather", False):
-                    return {"color": "#000000", "weight": 3}
-            
-                pct   = prop.get("loading", 0.0)
-                use_t = (df_trafo is not None) and (prop["idx"] >= line_cutoff)
-                colour = col_trf(pct) if use_t else col_line(pct)
-                return {"color": colour, "weight": 3}
+            # --- NEW: add Current-OPF cost & the difference ------------------------------
+            hourly_cost_df = pd.DataFrame(
+                {
+                    "hour": list(range(num_hours)),
+                    "Weather-Aware OPF Cost (PKR)":   weather_aware_cost,
+                    "Current OPF Generation Cost (PKR)":         business_as_usuall_cost,
+                }
+            )
+            hourly_cost_df["Δ Cost (WA – Current OPF)"] = (
+                hourly_cost_df["Weather-Aware OPF Cost (PKR)"]
+                - hourly_cost_df["Current OPF Generation Cost (PKR)"]
+            )
+        
+            return (
+                loading_records,
+                shedding_buses,
+                cumulative_load_shedding,
+                hourly_shed_weather_aware,
+                weather_aware_cost,
+                seen_buses,
+                hourly_shed_weather_aware,
+                served_load_per_hour_wa,
+                loading_percent_wa,
+                gen_per_hour_wa,
+                slack_per_hour_wa,
+                planned_slack_per_hour,
+                line_idx_map,
+                trafo_idx_map,
+                df_trafo,
+                df_lines,
+                df_load_params,
+                day_end_df,
+                hourly_cost_df,
+            )
+        # ─────────────────────────────────────────────────────────────────────────
+
+        # with st.spinner("Running weather-aware OPF …"):
+        #     # day_end_df, hourly_cost_df = weather_opf(line_outages)
+        #     (*_, day_end_df, hourly_cost_df) = weather_opf(line_outages)
+
+        with st.spinner("Running weather-aware OPF …"):
+            (
+                loading_records,           # 0
+                shedding_buses,            # 1
+                _cum_load_shed,            # 2  ← underscores for things you don’t use
+                _hourly_shed_wa,           # 3
+                _wa_cost,                  # 4
+                _seen_buses,               # 5
+                _hourly_shed_dup,          # 6
+                _served_load_wa,           # 7
+                _loading_percent_wa,       # 8
+                _gen_per_hour_wa,          # 9
+                _slack_per_hour_wa,        # 10
+                _planned_slack_per_hour,   # 11
+                line_idx_map,              # 12
+                trafo_idx_map,             # 13
+                df_trafo,                  # 14
+                df_lines,                  # 15
+                _df_load_params,           # 16
+                day_end_df,                # 17
+                hourly_cost_df,            # 18
+            ) = weather_opf(line_outages)
+
+
+        st.session_state.wa_ready          = True
+        st.session_state.wa_day_end_df     = day_end_df
+        st.session_state.wa_hourly_cost_df = hourly_cost_df
+
+        # 🔻  put this *inside* the button block, right after the spinner  🔻
+        st.session_state.update({
+            "wa_ready":                        True,
+            "wa_day_end_df":                   day_end_df,
+            "wa_hourly_cost_df":               hourly_cost_df,
+            "wa_results": {
+                "loading_percent_wa": loading_records,
+                "shedding_buses":     shedding_buses,
+            },
+            "hourly_shed_weather": _hourly_shed_wa,  
+            "served_load_per_hour_wa": _served_load_wa,
+            "gen_per_hour_wa":    _gen_per_hour_wa, 
+            "slack_per_hour_wa":         _slack_per_hour_wa,     # ← NEW
+            "planned_slack_per_hour":    _planned_slack_per_hour, # ← NEW
+            "wa_line_idx_map":  line_idx_map,
+            "wa_trafo_idx_map": trafo_idx_map,
+            "wa_max_loading_capacity":         df_lines["max_loading_percent"].max(),
+        })
+        # if df_trafo is not None and not df_trafo.empty:
+        #     st.session_state.wa_max_loading_capacity_transformer = (
+        #         df_trafo["max_loading_percent"].max()
+        #     )
+
+        if isinstance(df_trafo, pd.DataFrame) and not df_trafo.empty:
+                st.session_state.max_loading_capacity_transformer = (
+                    df_trafo["max_loading_percent"].max()
+                )
+
+        # if st.session_state.wa_ready:
+        #     st.subheader("Day-End Summary (Weather-Aware OPF)")
+        #     st.dataframe(st.session_state.wa_day_end_df, use_container_width=True)
+        
+        #     st.subheader("Hourly Generation Cost (Weather-Aware OPF)")
+        #     st.dataframe(st.session_state.wa_hourly_cost_df, use_container_width=True)
+
+
+    # if st.session_state.get("wa_ready", False):
     
-            folium.GeoJson(gdf.__geo_interface__,
-                           name=f"Transmission Net at Hour {h}",
-                           style_function=style_ft).add_to(m)
+    #     st.subheader("Day-End Summary (Weather-Aware OPF)")
+    #     st.dataframe(
+    #         st.session_state.wa_day_end_df, use_container_width=True
+    #     )
+    
+    #     st.subheader("Hourly Generation Cost (Weather-Aware OPF)")
+    #     st.dataframe(
+    #         st.session_state.wa_hourly_cost_df, use_container_width=True
+    #     )
+    # ░░ 1 ·  PERSIST RESULTS (right after weather_opf finishes) ░░
+    # st.session_state.update({
+    #     "wa_ready":                        True,
+    #     "wa_day_end_df":                   day_end_df,
+    #     "wa_hourly_cost_df":               hourly_cost_df,
+    #     "wa_results": {                    # <── NEW: everything the map needs
+    #         "loading_percent_wa": loading_records,
+    #         "shedding_buses":    shedding_buses,
+    #     },
+    #     "wa_line_idx_map":                 line_idx_map,
+    #     "wa_trafo_idx_map":                trafo_idx_map,
+    #     "wa_max_loading_capacity":         df_lines["max_loading_percent"].max(),
+    # })
+    # if df_trafo is not None and not df_trafo.empty:
+    #     st.session_state.wa_max_loading_capacity_transformer = (
+    #         df_trafo["max_loading_percent"].max()
+    #     )
+    
+    # ░░ 2 · ALWAYS-VISIBLE OUTPUT (tables + 24-hour map picker) ░░
+    if st.session_state.get("wa_ready", False):
+    
+        # 2-A  summary tables ---------------------------------------------------
+        st.subheader("Day-End Summary (Weather-Aware OPF)")
+        st.dataframe(st.session_state.wa_day_end_df, use_container_width=True)
+    
+        st.subheader("Hourly Generation Cost (Weather-Aware OPF)")
+        st.dataframe(st.session_state.wa_hourly_cost_df, use_container_width=True)
+    
+        # 2-B  hour picker (keeps its value in session_state.wa_hour) -----------
+        num_hours = len(st.session_state.network_data['df_load_profile'])
+        hour_options = list(range(num_hours))     # [0,1,…,23]
+        hr = st.selectbox(
+            "Select Hour to Visualize",
+            hour_options,
+            format_func=lambda h: f"Hour {h}",    # still shows “Hour 0”…“Hour 23”
+            key="wa_hour",                        # now always an int
+            help="Choose any hour; the map refreshes automatically.",
+        )
+    
+        # 2-C  build the Folium map for that hour -------------------------------
+        hr              = st.session_state.wa_hour
+        df_line         = st.session_state.network_data['df_line'].copy()
+        df_load         = st.session_state.network_data['df_load'].copy()
+        df_trafo        = st.session_state.network_data.get('df_trafo')
+        loading_rec     = st.session_state.wa_results['loading_percent_wa'][hr]
+        shed_buses      = st.session_state.wa_results['shedding_buses']
+        line_idx_map    = st.session_state.wa_line_idx_map
+        trafo_idx_map   = st.session_state.wa_trafo_idx_map
+        outages         = st.session_state.line_outages          # created earlier
+    
+        # — helper colour fns (identical logic to Page-3) -----------------------
+        def get_color(pct, max_cap):
+            if pct is None:                return '#FF0000'
+            if pct == 0:                   return '#000000'
+            if pct <= 0.75*max_cap:        return '#00FF00'
+            if pct <= 0.90*max_cap:        return '#FFFF00'
+            if pct <  max_cap:             return '#FFA500'
+            return '#FF0000'
+        get_color_trafo = get_color
+    
+        def check_bus_pair_df(df_line, df_trafo, pair):
+            fbus, tbus = pair
+            if df_trafo is not None:
+                if (((df_trafo["hv_bus"] == fbus) & (df_trafo["lv_bus"] == tbus)) |
+                    ((df_trafo["hv_bus"] == tbus) & (df_trafo["lv_bus"] == fbus))).any():
+                    return True
+            if (((df_line["from_bus"] == fbus) & (df_line["to_bus"] == tbus)) |
+                ((df_line["from_bus"] == tbus) & (df_line["to_bus"] == fbus))).any():
+                return False
+            return None
+    
+        # lines → GeoDataFrame --------------------------------------------------
+        df_line["geodata"] = df_line["geodata"].apply(
+            lambda x: [(lon, lat) for lat, lon in eval(x)] if isinstance(x, str) else x
+        )
+        gdf = gpd.GeoDataFrame(
+            df_line,
+            geometry=[LineString(c) for c in df_line["geodata"]],
+            crs="EPSG:4326",
+        )
+        gdf["idx"]     = gdf.index
+        gdf["loading"] = gdf["idx"].map(lambda i: loading_rec[i] if i < len(loading_rec) else 0.0)
+    
+        # mark weather-down equipment
+        weather_down = set()
+        for fbus, tbus, start_hr in outages:
+            if hr >= start_hr:
+                is_tf = check_bus_pair_df(df_line, df_trafo, (fbus, tbus))
+                if is_tf:
+                    idx = trafo_idx_map.get((fbus, tbus))
+                    if idx is not None:
+                        weather_down.add(idx + len(df_line))
+                else:
+                    idx = line_idx_map.get((fbus, tbus))
+                    if idx is not None:
+                        weather_down.add(idx)
+        gdf["down_weather"] = gdf["idx"].isin(weather_down)
+    
+        # Folium map ------------------------------------------------------------
+        m = folium.Map(location=[27, 66.5], zoom_start=6, width=800, height=600)
+        max_line_cap = st.session_state.wa_max_loading_capacity
+        max_trf_cap  = st.session_state.get("wa_max_loading_capacity_transformer",
+                                            max_line_cap)
+        no_of_lines  = len(df_line)
+    
+        def style_fn(feat):
+            p = feat["properties"]
+            if p.get("down_weather", False):
+                return {"color": "#000000", "weight": 3}
+            pct = p.get("loading", 0.0)
+            colour = (get_color_trafo(pct, max_trf_cap)
+                      if df_trafo is not None and p["idx"] >= no_of_lines
+                      else get_color(pct, max_line_cap))
+            return {"color": colour, "weight": 3}
+    
+        folium.GeoJson(gdf.__geo_interface__, style_function=style_fn,
+                       name=f"Transmission Net – Hour {hr}").add_to(m)
+    
+        # load circles (served vs shed) ----------------------------------------
+        shed_now = [b for (h, b) in shed_buses if h == hr]
+        for _, row in df_load.iterrows():
+            bus = row["bus"]
+            lat, lon = ast.literal_eval(row["load_coordinates"])
+            col = "red" if bus in shed_now else "green"
+            folium.Circle((lat, lon), radius=20000,
+                          color=col, fill_color=col, fill_opacity=0.5).add_to(m)
+    
+        # legend + title (same HTML you used before) ----------------------------
+        legend_html = """
+        <style>
+          .legend-box,* .legend-box { color:#000 !important; }
+        </style>
+        
+        <div class="legend-box leaflet-control leaflet-bar"
+             style="position:absolute; top:150px; left:10px; z-index:9999;
+                    background:#ffffff; padding:8px; border:1px solid #ccc;
+                    font-size:14px; max-width:210px;">
+          <strong>Line Load Level&nbsp;(&#37; of Max)</strong><br>
+          <span style='display:inline-block;width:12px;height:12px;background:#00FF00;'></span>&nbsp;Below&nbsp;75&nbsp;%<br>
+          <span style='display:inline-block;width:12px;height:12px;background:#FFFF00;'></span>&nbsp;75–90&nbsp;%<br>
+          <span style='display:inline-block;width:12px;height:12px;background:#FFA500;'></span>&nbsp;90–100&nbsp;%<br>
+          <span style='display:inline-block;width:12px;height:12px;background:#FF0000;'></span>&nbsp;Overloaded&nbsp;>&nbsp;100&nbsp;%<br>
+          <span style='display:inline-block;width:12px;height:12px;background:#000000;'></span>&nbsp;Weather‑Impacted<br><br>
+        
+          <strong>Load Status</strong><br>
+          <span style='display:inline-block;width:12px;height:12px;background:#008000;border-radius:50%;'></span>&nbsp;Fully Served<br>
+          <span style='display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;'></span>&nbsp;Not Fully Served
+        </div>
+        """
+        m.get_root().html.add_child(folium.Element(legend_html))
+    
+       # ---------------- title (overwrite your title_html string) -----------------
+        title_html = f"""
+        <style>
+          .map-title {{ color:#000 !important; }}
+        </style>
+        
+        <div class="map-title leaflet-control leaflet-bar"
+             style="position:absolute; top:90px; left:10px; z-index:9999;
+                    background:rgba(255,255,255,0.9); padding:4px;
+                    font-size:18px; font-weight:bold;">
+          Projected Operation - Under Weather Risk Aware OPF – Hour {hr}
+        </div>
+        """
+        m.get_root().html.add_child(folium.Element(title_html))
+    
+        folium.LayerControl(collapsed=False).add_to(m)
+    
+        st.write(f"### Network Loading Visualization – Hour {hr}")
+        st_folium(m, width=800, height=600, key=f"wa_map_{hr}")
 
-            # load circles
-            for _, r in df_load.iterrows():
-                lat, lon = ast.literal_eval(r.load_coordinates)
-                col = "red" if r.bus in shed_buses_h else "green"
-                folium.Circle((lat,lon), radius=20000,
-                              color=col, fill_color=col, fill_opacity=0.5).add_to(m)
 
-            legend_html = """
-            <style>
-              .legend-box,* .legend-box { color:#000 !important; }
-            </style>
-            
-            <div class="legend-box leaflet-control leaflet-bar"
-                 style="position:absolute; top:150px; left:10px; z-index:9999;
-                        background:#ffffff; padding:8px; border:1px solid #ccc;
-                        font-size:14px; max-width:210px;">
-              <strong>Line Load Level&nbsp;(&#37; of Max)</strong><br>
-              <span style='display:inline-block;width:12px;height:12px;background:#00FF00;'></span>&nbsp;Below&nbsp;75&nbsp;%<br>
-              <span style='display:inline-block;width:12px;height:12px;background:#FFFF00;'></span>&nbsp;75–90&nbsp;%<br>
-              <span style='display:inline-block;width:12px;height:12px;background:#FFA500;'></span>&nbsp;90–100&nbsp;%<br>
-              <span style='display:inline-block;width:12px;height:12px;background:#FF0000;'></span>&nbsp;Overloaded&nbsp;>&nbsp;100&nbsp;%<br>
-              <span style='display:inline-block;width:12px;height:12px;background:#000000;'></span>&nbsp;Weather‑Impacted<br><br>
-            
-              <strong>Load Status</strong><br>
-              <span style='display:inline-block;width:12px;height:12px;background:#008000;border-radius:50%;'></span>&nbsp;Fully Served<br>
-              <span style='display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;'></span>&nbsp;Not Fully Served
-            </div>
-            """
-            m.get_root().html.add_child(folium.Element(legend_html))
-
-            
-            # ---------------- title (overwrite your title_html string) -----------------
-            title_html = f"""
-            <style>
-              .map-title {{ color:#000 !important; }}
-            </style>
-            
-            <div class="map-title leaflet-control leaflet-bar"
-                 style="position:absolute; top:90px; left:10px; z-index:9999;
-                        background:rgba(255,255,255,0.9); padding:4px;
-                        font-size:18px; font-weight:bold;">
-              Projected Operation - Under Weather Risk Aware OPF – Hour {h}
-            </div>
-            """
-            m.get_root().html.add_child(folium.Element(title_html))
-
-            folium.LayerControl(collapsed=False).add_to(m)
-            st_folium(m, width=800, height=600, key=f"wa_map_{h}")
 
 # ────────────────────────────────────────────────────────────────────────────
-# Page 5 :  Data Analytics
+# Page 5 :  Data Analytics
 # ────────────────────────────────────────────────────────────────────────────
 # ────────────────────────────────────────────────────────────────────────────
-# ────────────────────────────────────────────────────────────────────────────
-# elif selection == "Data Analytics":
-#     import plotly.graph_objects as go
-#     import plotly.express        as px
-#     import numpy                 as np
-#     st.title("Data Analytics")
-
-#     # --------------------------------------------------------------------- #
-#     # sanity‑check that prerequisites exist
-#     # --------------------------------------------------------------------- #
-#     if ("bau_results"           not in st.session_state or
-#         "weather_aware_results" not in st.session_state or
-#         st.session_state.bau_results            is None or
-#         st.session_state.weather_aware_results  is None):
-#         st.info("Run **Business As Usual** and **Weather‑Aware System** first.")
-#         st.stop()
-
-#     # common data ----------------------------------------------------------
-#     num_hours        = len(st.session_state.network_data["df_load_profile"])
-#     hours            = list(range(num_hours))
-
-#     load_shed_bau    = st.session_state.bau_results["hourly_shed_bau"]
-#     load_shed_wa     = st.session_state.weather_aware_results["hourly_shed"]
-
-#     cost_bau_raw     = st.session_state.bau_results["business_as_usual_cost"]
-#     cost_wa_raw      = st.session_state.weather_aware_results["cost"]
-#     cost_bau_M       = [c/1e6 for c in cost_bau_raw]      # scale to millions
-#     cost_wa_M        = [c/1e6 for c in cost_wa_raw]
-
-#     df_line          = st.session_state.network_data["df_line"]
-#     loading_bau      = np.array(st.session_state.bau_results["loading_percent_bau"])
-#     loading_wa       = np.array(st.session_state.weather_aware_results["loading_percent"])
-
-#     # line legend helpers
-#     line_legends     = [f"Line {r['from_bus']}-{r['to_bus']}" for _, r in df_line.iterrows()]
-#     palette          = px.colors.qualitative.Plotly
-#     colour_list      = palette * (loading_bau.shape[1] // len(palette) + 1)
-
-#     # --------------------------------------------------------------------- #
-#     # persistent UI flags
-#     # --------------------------------------------------------------------- #
-#     # for k in ("show_comp", "show_diff", "show_lines", "show_bus", "bus_to_plot"):
-#     #     if k not in st.session_state:
-#     #         st.session_state[k] = False if k != "bus_to_plot" else None
-#      # Initialize session state flags for new plots
-#     for k in ("show_comp", "show_diff", "show_lines", "show_bus", "bus_to_plot", "show_slack", "show_gen", "gen_to_plot"):  
-#         if k not in st.session_state:
-#             st.session_state[k] = False if not k.endswith("_to_plot") else None
-
-#     # --------------------------------------------------------------------- #
-#     # three always‑visible buttons
-#     # --------------------------------------------------------------------- #
-#     col1, col2, col3 = st.columns(3)
-#     with col1:
-#         if st.button("Hourly Load Shedding and Generation Cost Comparison"):
-#             st.session_state.show_comp  = True
-#     with col2:
-#         if st.button("Cost Difference & Lost Savings (BAU vs WA)"):
-#             st.session_state.show_diff  = True
-#     with col3:
-#         if st.button("Line‑Loading‑over‑Time"):
-#             st.session_state.show_lines = True
-
-#     # Row of buttons for new generator analytics
-#     col4, col5 = st.columns(2)
-#     with col4:
-#         if st.button("Hourly Slack Generator Dispatch Comparison"):
-#             st.session_state.show_slack = True
-#     with col5:
-#         # generator selection dropdown
-#         gen_options = st.session_state.network_data["df_gen"]["bus"].astype(int).tolist()
-#         sel_gen = st.selectbox("Select a Generator for detailed dispatch comparison:", gen_options, key="gen_select")
-#         # ── Add button to show the generator‑dispatch plot ──────────────────────
-#         if st.button("Generator Dispatch at Selected Generator"):
-#             st.session_state.show_gen = True
-        
-#         if st.session_state.show_gen:
-#             df_gen_params  = st.session_state.network_data["df_gen"]
-#             df_gen_profile = st.session_state.network_data["df_gen_profile"]
-        
-#             # only those buses for which we have a p_mw_PV{bus} column
-#             gens = [
-#                 int(b) for b in df_gen_params["bus"].tolist()[1:]
-#                 if f"p_mw_PV{b}" in df_gen_profile.columns
-#             ]
-#             if not gens:
-#                 st.warning("No generators with profile data found.")
-#                 st.stop()
-        
-#             bus = st.selectbox("Select generator bus:", gens)
-        
-#             # build the profile column name
-#             col = f"p_mw_PV{bus}"
-#             original = df_gen_profile[col].tolist()
-        
-#             # now find the same generator’s index in the per‑generator result lists
-#             try:
-#                 # look up index in the generator‑parameters table
-#                 bus_idx = df_gen_params.reset_index().index[df_gen_params["bus"] == bus][0]
-#             except IndexError:
-#                 st.warning(f"Generator at bus {bus} not found in parameters.")
-#                 st.stop()
-        
-#             # extract BAU & WA dispatch for that generator
-#             bau_list = st.session_state.bau_results["gen_per_hour_bau"]
-#             wa_list  = st.session_state.weather_aware_results["gen_per_hour"]
-        
-#             # sanity check
-#             if bus_idx >= len(bau_list[0]) or bus_idx >= len(wa_list[0]):
-#                 st.error("Internal mapping error: generator index out of range.")
-#                 st.stop()
-        
-#             served_bau = [hr[bus_idx] for hr in bau_list]
-#             served_wa  = [hr[bus_idx] for hr in wa_list]
-#             hours      = list(range(len(original)))
-        
-#             # plot
-#             fig2 = go.Figure()
-#             fig2.add_trace(go.Bar(x=hours, y=original,   name="Planned Dispatch"))
-#             fig2.add_trace(go.Bar(x=hours, y=served_bau, name="Current OPF"))
-#             fig2.add_trace(go.Bar(x=hours, y=served_wa,  name="Weather‑Aware OPF"))
-#             fig2.update_layout(
-#                 title=f"Generator Dispatch Comparison at Bus {bus}",
-#                 xaxis_title="Hour",
-#                 yaxis_title="Generation (MWh)",
-#                 barmode="group",
-#                 template="plotly_dark",
-#                 height=600, width=1000,
-#                 margin=dict(l=40, r=40, t=60, b=40)
-#             )
-#             st.plotly_chart(fig2, use_container_width=True)
-        
-#     # ------------------------------------------------------------------ #
-#     #  extra UI for “Plot 4”  –  pick a load‑bus & make the button
-#     # ------------------------------------------------------------------ #
-#     bus_options = st.session_state.network_data["df_load"]["bus"].astype(int).tolist()
-#     sel_bus     = st.selectbox("Select a Load Bus for detailed served‑load comparison:",
-#                                bus_options, key="bus_select")
-    
-#     if st.button("Load‑Served at Selected Load Bus"):
-#         st.session_state.show_bus    = True
-#         st.session_state.bus_to_plot = sel_bus
-
-
-#     # ===================================================================== #
-#     # PLOT 1  ─ Hourly load‑shedding + grouped cost bars
-#     # ===================================================================== #
-#     if st.session_state.show_comp:
-#         # — Load‑shedding comparison —
-#         fig_ls = go.Figure()
-#         fig_ls.add_trace(go.Scatter(
-#             x=hours, y=load_shed_bau,
-#             mode="lines+markers", name="Current OPF Load Shedding",
-#             line=dict(color="rgba(99,110,250,1)", width=3), marker=dict(size=6)))
-#         fig_ls.add_trace(go.Scatter(
-#             x=hours, y=load_shed_wa,
-#             mode="lines+markers", name="Weather‑Aware Load Shedding",
-#             line=dict(color="rgba(239,85,59,1)",  width=3), marker=dict(size=6)))
-#         fig_ls.update_layout(
-#             title="Hourly Load‑Shedding Comparison",
-#             xaxis=dict(title="Hour (0–23)", tickmode="linear", dtick=1),
-#             yaxis_title="Load Shedding [MWh]",
-#             template="plotly_dark", legend=dict(x=0.01, y=0.99),
-#             width=1000, height=500, margin=dict(l=60,r=40,t=60,b=50))
-#         st.plotly_chart(fig_ls, use_container_width=True)
-
-#         # — Grouped generation‑cost bars —
-#         fig_cost = go.Figure()
-#         fig_cost.add_bar(x=hours, y=cost_bau_M, name="BAU Cost",
-#                          marker=dict(color="rgba(99,110,250,0.7)"))
-#         fig_cost.add_bar(x=hours, y=cost_wa_M,  name="Weather‑Aware Cost",
-#                          marker=dict(color="rgba(239,85,59,0.7)"))
-#         fig_cost.update_layout(
-#             barmode="group",
-#             title="Hourly Generation Cost Comparison",
-#             xaxis=dict(title="Hour (0–23)", tickmode="linear", dtick=1),
-#             yaxis_title="Cost [Million PKR]",
-#             template="plotly_dark", legend=dict(x=0.01,y=0.99),
-#             width=1000, height=500, margin=dict(l=60,r=40,t=60,b=50))
-#         st.plotly_chart(fig_cost, use_container_width=True)
-
-#     # ===================================================================== #
-#     # PLOT 2  ─ Cost‑difference *and* Lost‑Savings area
-#     # ===================================================================== #
-#     if st.session_state.show_diff:
-#         # --- cost‑difference shaded area ----------------------------------
-#         fig_diff = go.Figure()
-#         fig_diff.add_trace(go.Scatter(
-#             x=hours + hours[::-1],
-#             y=cost_bau_M + cost_wa_M[::-1],
-#             fill="toself", fillcolor="rgba(255,140,0,0.3)",
-#             line=dict(color="rgba(255,255,255,0)"),
-#             name="Loss of Potential Revenue (Cost Difference)",
-#             hoverinfo="skip"))
-#         fig_diff.add_trace(go.Scatter(
-#             x=hours, y=cost_bau_M,
-#             mode="lines+markers", name="Current OPF Cost",
-#             line=dict(color="rgba(0,204,150,1)", width=3)))
-#         fig_diff.add_trace(go.Scatter(
-#             x=hours, y=cost_wa_M,
-#             mode="lines+markers", name="Weather‑Aware Cost",
-#             line=dict(color="rgba(171,99,250,1)", width=3)))
-#         fig_diff.update_layout(
-#             title="Potential Lost Revenue – Hourly Cost Difference",
-#             xaxis=dict(title="Hour (0–23)", tickmode="linear", dtick=1, range=[0,max(hours)]),
-#             yaxis_title="Cost [Million PKR]",
-#             template="plotly_dark", legend=dict(x=0.01,y=0.99),
-#             width=1200, height=500, margin=dict(l=60,r=40,t=60,b=50))
-#         st.plotly_chart(fig_diff, use_container_width=True)
-
-#         # --- lost‑savings‑only area plot ----------------------------------
-#         lost_sav = [wa - bau if wa > bau else 0 for wa, bau in zip(cost_wa_M, cost_bau_M)]
-#         fig_lsav = go.Figure()
-#         fig_lsav.add_trace(go.Scatter(
-#             x=hours, y=lost_sav, fill="tozeroy",
-#             fillcolor="rgba(255,99,71,0.6)", mode="none",
-#             name="Lost Savings Region",
-#             hovertemplate="Hour %{x}: %{y:.2f} M PKR<extra></extra>"))
-#         fig_lsav.update_layout(
-#             title="Potential Lost Revenue (When Weather‑Aware > BAU)",
-#             xaxis=dict(title="Hour (0–23)", tickmode="linear", dtick=1),
-#             yaxis_title="Lost Revenue [Million PKR]",
-#             template="plotly_dark", width=1000, height=500)
-#         st.plotly_chart(fig_lsav, use_container_width=True)
-
-#     # ===================================================================== #
-#     # PLOT 3  ─ Line‑loading evolution (BAU & WA)
-#     # ===================================================================== #
-#     if st.session_state.show_lines:
-#         x_axis = np.arange(loading_bau.shape[0])
-
-#         # — BAU line‑loading —
-#         fig_bau = go.Figure()
-#         for idx in range(loading_bau.shape[1]):
-#             fig_bau.add_trace(go.Scatter(
-#                 x=x_axis, y=loading_bau[:, idx],
-#                 mode="lines",
-#                 name=line_legends[idx],
-#                 line=dict(width=3, color=colour_list[idx], dash="solid")))
-#         fig_bau.update_layout(
-#             title="Current OPF Line Loading Over Time",
-#             template="plotly_dark",
-#             xaxis_title="Hour",
-#             yaxis_title="Line Loading [%]",
-#             xaxis=dict(tickmode="linear", dtick=1),
-#             plot_bgcolor="rgb(20,20,20)",
-#             showlegend=True)
-#         st.plotly_chart(fig_bau, use_container_width=True)
-
-#         # — WA line‑loading —
-#         fig_wa = go.Figure()
-#         for idx in range(loading_wa.shape[1]):
-#             fig_wa.add_trace(go.Scatter(
-#                 x=x_axis, y=loading_wa[:, idx],
-#                 mode="lines",
-#                 name=line_legends[idx],
-#                 line=dict(width=3, color=colour_list[idx], dash="dash")))
-#         fig_wa.update_layout(
-#             title="Weather‑Aware OPF Line Loading Over Time",
-#             template="plotly_dark",
-#             xaxis_title="Hour",
-#             yaxis_title="Line Loading [%]",
-#             xaxis=dict(tickmode="linear", dtick=1),
-#             plot_bgcolor="rgb(20,20,20)",
-#             showlegend=True)
-#         st.plotly_chart(fig_wa, use_container_width=True)
-
-
-#      # ===================================================================== #
-#     # PLOT 4  ─ Hourly load‑served comparison at one specific bus
-#     # ===================================================================== #
-#     if st.session_state.show_bus and st.session_state.bus_to_plot is not None:
-#         bus       = st.session_state.bus_to_plot
-#         hours     = list(range(num_hours))
-    
-#         # demand series from the Load‑Profile sheet
-#         demand_col = f"p_mw_bus_{bus}"
-#         lp_df      = st.session_state.network_data["df_load_profile"]
-#         if demand_col not in lp_df.columns:
-#             st.warning(f"Column {demand_col} not found in Load Profile – cannot plot.")
-#         else:
-#             demand = lp_df[demand_col].tolist()
-    
-#             # where does this bus sit in the served‑load lists?
-#             df_load = st.session_state.network_data["df_load"]
-#             try:
-#                 bus_idx = df_load.reset_index().index[df_load["bus"] == bus][0]
-#             except IndexError:
-#                 st.warning(f"Bus {bus} not found in Load Parameters – cannot plot.")
-#                 bus_idx = None
-    
-#             if bus_idx is not None:
-#                 served_bau = [
-#                     hour[bus_idx] if hour[bus_idx] is not None else 0
-#                     for hour in st.session_state.bau_results["served_load_per_hour"]
-#                 ]
-#                 served_wa  = [
-#                     hour[bus_idx] if hour[bus_idx] is not None else 0
-#                     for hour in st.session_state.weather_aware_results["served_load"]
-#                 ]
-    
-#                 fig_bus = go.Figure()
-#                 fig_bus.add_bar(x=hours, y=demand,
-#                                 name="Load Demand",
-#                                 marker=dict(color="rgba(99,110,250,0.8)"))
-#                 fig_bus.add_bar(x=hours, y=served_bau,
-#                                 name="Current OPF Served",
-#                                 marker=dict(color="rgba(239,85,59,0.8)"))
-#                 fig_bus.add_bar(x=hours, y=served_wa,
-#                                 name="Weather‑Aware Served",
-#                                 marker=dict(color="rgba(0,204,150,0.8)"))
-    
-#                 fig_bus.update_layout(
-#                     barmode="group",
-#                     title=f"Hourly Load Served – Bus {bus}",
-#                     xaxis=dict(title="Hour", tickmode="linear", dtick=1),
-#                     yaxis_title="Load [MWh]",
-#                     template="plotly_dark",
-#                     legend=dict(title="Series"),
-#                     width=1200, height=600,
-#                     margin=dict(l=40, r=40, t=60, b=40)
-#                 )
-#                 st.plotly_chart(fig_bus, use_container_width=True)
-
-#    # PLOT Slack Generator Comparison
-#     # PLOT Slack Generator Comparison
-#     if st.session_state.show_slack:
-#         # retrieve arrays
-#         hours = list(range(24))
-#         planned = st.session_state.bau_results['slack_per_hour_bau']
-#         bau_slack = st.session_state.bau_results['slack_per_hour_bau']
-#         wa_slack = st.session_state.weather_aware_results['slack_per_hour']
-
-#         fig = go.Figure()
-#         fig.add_trace(go.Bar(x=hours, y=planned, name='Planned Slack Dispatch'))
-#         fig.add_trace(go.Bar(x=hours, y=bau_slack, name='Projected OPF: Current'))
-#         fig.add_trace(go.Bar(x=hours, y=wa_slack, name='Projected OPF: Weather-Aware'))
-#         fig.update_layout(
-#             title="Hourly Slack Generator Dispatch Comparison",
-#             xaxis_title="Hour",
-#             yaxis_title="Generation (MWh)",
-#             barmode='group',
-#             template='plotly_dark',
-#             height=600, width=1000
-#         )
-#         st.plotly_chart(fig, use_container_width=True)
-        
+# Page 5 :  Data Analytics
 elif selection == "Data Analytics":
-    import plotly.graph_objects as go
-    import plotly.express        as px
-    import numpy                 as np
+    st.title("Data Analytics Dashboard")
+    # Persistent store for the figures drawn on this page
+    if "da_figs" not in st.session_state:         # first visit only
+        st.session_state.da_figs = {}             # keep order → list of figures
 
-    st.title("Data Analytics")
 
-    # ── sanity‑check ─────────────────────────────────────────────────────────
-    if ("bau_results" not in st.session_state or
-        "weather_aware_results" not in st.session_state or
-        st.session_state.bau_results is None or
-        st.session_state.weather_aware_results is None):
-        st.info("Run **Projected Operation - Under Current OPF** and **Weather‑Aware System** first.")
+    # ── Guard rails --------------------------------------------------------
+    if not (st.session_state.get("bau_ready") and st.session_state.get("wa_ready")):
+        st.info(
+            "Please run both **Projected Operation – Under Current OPF** "
+            "and **Projected Operation – Under Weather-Risk-Aware OPF** first."
+        )
         st.stop()
 
-    # ── common data ─────────────────────────────────────────────────────────
-    num_hours    = len(st.session_state.network_data["df_load_profile"])
-    hours        = list(range(num_hours))
-
-    # load‑shed & cost
-    shed_bau     = st.session_state.bau_results["hourly_shed_bau"]
-    shed_wa      = st.session_state.weather_aware_results["hourly_shed"]
-    cost_bau_M   = [c/1e6 for c in st.session_state.bau_results["business_as_usual_cost"]]
-    cost_wa_M    = [c/1e6 for c in st.session_state.weather_aware_results["cost"]]
-
-    # line‑loading
-    df_line      = st.session_state.network_data["df_line"]
-    lb_bau       = np.array(st.session_state.bau_results["loading_percent_bau"])
-    lb_wa        = np.array(st.session_state.weather_aware_results["loading_percent"])
-    legends      = [f"{r['from_bus']}→{r['to_bus']}" for _,r in df_line.iterrows()]
-    palette      = px.colors.qualitative.Plotly
-    colours      = palette * (lb_bau.shape[1]//len(palette)+1)
-
-    # generator profiles
-    df_gen       = st.session_state.network_data["df_gen"]
-    df_gp        = st.session_state.network_data["df_gen_profile"]
-    valid_gens   = [
-        int(b) for b in df_gen["bus"].tolist()[1:]
-        if f"p_mw_PV{b}" in df_gp.columns
-    ]
-
-    # load‑bus list
-    df_load      = st.session_state.network_data["df_load"]
-    valid_loads  = df_load["bus"].astype(int).tolist()
-
-    # ── init session flags ───────────────────────────────────────────────────
-    for key in (
-        "show_comp","show_diff","show_lines",
-        "show_slack","show_gen","gen_to_plot",
-        "show_bus","bus_to_plot"
-    ):
-        if key not in st.session_state:
-            st.session_state[key] = False
-                
-    if "bus_to_plot" not in st.session_state:
-            st.session_state.bus_to_plot = None
-
-    st.markdown("---")
-
-    # ── PLOT 1: Load‑shedding & Cost ────────────────────────────────────────
-    if st.button("1) Hourly Load‑Shedding & Generation Cost Comparison"):
-        st.session_state.show_comp = True
-    if st.session_state.show_comp:
-        # load‑shedding lines
-        fig1 = go.Figure()
-        fig1.add_trace(go.Scatter(x=hours, y=shed_bau, mode="lines+markers", name="Projected Operation: Current OPF Load Shedding"))
-        fig1.add_trace(go.Scatter(x=hours, y=shed_wa,  mode="lines+markers", name="Projected Operation: Weather Risk Aware OPF Load Shedding"))
-        fig1.update_layout(title="Load‑Shedding Comparison", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
-        st.plotly_chart(fig1, use_container_width=True)
-
-        # cost bars
-        fig1b = go.Figure()
-        fig1b.add_bar(x=hours, y=cost_bau_M, name="Projected Operation: Current OPF Load Shedding")
-        fig1b.add_bar(x=hours, y=cost_wa_M,  name="Projected Operation: Weather Risk Aware OPF Load Shedding")
-        fig1b.update_layout(barmode="group", title="Generation Cost Comparison", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
-        st.plotly_chart(fig1b, use_container_width=True)
-
-    st.markdown("---")
-
-    # ── PLOT 2: Cost‑Difference & Lost Savings ───────────────────────────────
-    if st.button("2) Potential Lost in Revenue: Difference in Generation Cost"):
-        st.session_state.show_diff = True
-    if st.session_state.show_diff:
-        # cost‑difference filled
-        fig2 = go.Figure()
-        fig2.add_trace(go.Scatter(
-            x=hours + hours[::-1],
-            y=cost_bau_M + cost_wa_M[::-1],
-            fill="toself", fillcolor="rgba(255,140,0,0.3)",
-            line=dict(color="rgba(0,0,0,0)"),
-            name="Cost Difference"))
-        fig2.add_trace(go.Scatter(x=hours, y=cost_bau_M, name="Projected Operation: Current OPF Cost"))
-        fig2.add_trace(go.Scatter(x=hours, y=cost_wa_M,  name="Projected Operation: Weather Risk Aware Cost"))
-        fig2.update_layout(title="Hourly Cost Difference", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
-        st.plotly_chart(fig2, use_container_width=True)
-
-        # # lost‑savings only
-        # lost = [wa - bau if wa>bau else 0 for wa,bau in zip(cost_wa_M,cost_bau_M)]
-        # fig2b = go.Figure()
-        # fig2b.add_trace(go.Scatter(
-        #     x=hours, y=lost, fill="tozeroy",
-        #     fillcolor="rgba(255,99,71,0.6)", mode="none",
-        #     name="Potential Loss of Revenue"))
-        # fig2b.update_layout(title="Potential Loss of Revenue", xaxis_title="Hour", yaxis_title="Million PKR", template="plotly_dark")
-        # st.plotly_chart(fig2b, use_container_width=True)
-                # ── LOST‑SAVINGS & LOST‑LOAD DIFFERENCE ─────────────────────────
-        # compute lost‐savings (generation cost difference) & lost‐load revenue
-        lost_savings = [w - b if w>b else 0 for w,b in zip(cost_wa_M, cost_bau_M)]
-        # convert hourly shed to float then compute lost‐load (×45,000 PKR/MWh → millions)
-        bau_ld = [float(x) for x in shed_bau]
-        wa_ld  = [float(x) for x in shed_wa]
-        diff_ld = [(b - w)*(45000/1e6) for b,w in zip(bau_ld, wa_ld)]
-
-        fig2b = go.Figure()
-        # generation‐cost difference region
-        fig2b.add_trace(go.Scatter(
-            x=hours, y=lost_savings, fill="tozeroy", mode="none",
-            name="Difference in Generation Cost",
-            fillcolor="rgba(255,99,71,0.6)",
-            hovertemplate="Hour %{x}: %{y:.2f} M PKR<extra></extra>"
-        ))
-        # lost‐load revenue region
-        fig2b.add_trace(go.Scatter(
-            x=hours, y=diff_ld, fill="tozeroy", mode="none",
-            name="Potential Loss of Revenue",
-            fillcolor="rgba(0,0,255,0.4)",
-            hovertemplate="Hour %{x}: %{y:.2f} M PKR<extra></extra>"
-        ))
-        fig2b.update_layout(
-            title="Potential Loss of Revenue",
-            xaxis_title="Hour",
-            yaxis_title="Millions PKR",
-            template="plotly_dark",
-            width=1000, height=500
+    # --- pull the cached series we need -----------------------------------
+    planned_slack = st.session_state.planned_slack_per_hour
+    slack_bau      = st.session_state.slack_per_hour_bau
+    slack_wa       = st.session_state.slack_per_hour_wa
+    if "df_gen_params" not in st.session_state.network_data:
+        path = st.session_state.get("uploaded_file")
+        st.session_state.network_data["df_gen_params"] = pd.read_excel(
+            path, sheet_name="Generator Parameters"
         )
-        st.plotly_chart(fig2b, use_container_width=True)
+    if "df_gen_profile" not in st.session_state.network_data:
+        path = st.session_state.get("uploaded_file")
+        st.session_state.network_data["df_gen_profile"] = pd.read_excel(
+            path, sheet_name="Generator Profile"
+        )
+    df_gen_params   = st.session_state.network_data["df_gen_params"]      # “Generator Parameters” sheet
+    df_gen_profile  = st.session_state.network_data["df_gen_profile"]     # “Generator Profile”   sheet
+    # ------------------------------------------------------------------
+    df_load_profile       = st.session_state.network_data["df_load_profile"]
+    df_load_params        = st.session_state.network_data["df_load"]
+    served_bau            = st.session_state.served_load_per_hour_bau
+    served_wa             = st.session_state.served_load_per_hour_wa
+    loading_percent_bau = st.session_state.bau_results["loading_percent_bau"]
+    loading_percent_wa  = st.session_state.wa_results["loading_percent_wa"]
+    df_line             = st.session_state.network_data["df_line"].copy()
+    hours                = list(range(len(st.session_state.bau_hourly_cost_df)))
+    hourly_shed_bau     = st.session_state.hourly_shed_bau
+    hourly_shed_weather = st.session_state.hourly_shed_weather
+    cost_bau             = st.session_state.bau_hourly_cost_df[
+        "Current OPF Generation Cost (PKR)"
+    ].tolist()
+    cost_weather         = st.session_state.wa_hourly_cost_df[
+        "Weather-Aware OPF Cost (PKR)"
+    ].tolist()
 
+    # **************************************************************
+    # *  Helper functions – identical maths, but return a Figure   *
+    # **************************************************************
+    def make_load_shed_fig(hours, shed_bau, shed_wa):
+        shed_bau_mwh = shed_bau                                   # already in MWh
+        shed_wa_mwh  = shed_wa
 
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=hours,
+                y=shed_bau_mwh,
+                mode="lines+markers",
+                name="Projected Operation: Current OPF Load Shedding",
+                line=dict(color="rgba(99,110,250,1)", width=3),
+                marker=dict(size=6),
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=hours,
+                y=shed_wa_mwh,
+                mode="lines+markers",
+                name="Projected Operation: Weather-Aware OPF Load Shedding",
+                line=dict(color="rgba(239,85,59,1)", width=3),
+                marker=dict(size=6),
+            )
+        )
+        fig.update_layout(
+            title="Hourly Load-Shedding Comparison",
+            xaxis_title="Time [hours]",
+            yaxis_title="Load Shedding [MWh]",
+            xaxis=dict(tickmode="linear", dtick=1, range=[0, max(hours)]),
+            template="plotly_dark",
+            legend=dict(x=0.01, y=0.99),
+            width=1000,
+            height=500,
+            margin=dict(l=60, r=40, t=60, b=50),
+        )
+        return fig
+
+    def make_cost_diff_fig(hours, cost_bau, cost_wa):
+        # scale to millions
+        cost_bau_m = [x / 1e6 for x in cost_bau]
+        cost_wa_m  = [x / 1e6 for x in cost_wa]
+
+        fig = go.Figure()
+
+        fig.add_trace(
+            go.Scatter(
+                x=hours + hours[::-1],
+                y=cost_bau_m + cost_wa_m[::-1],
+                fill="toself",
+                fillcolor="rgba(255,140,0,0.3)",
+                line=dict(color="rgba(255,255,255,0)"),
+                hoverinfo="skip",
+                showlegend=True,
+                name="Cost Difference",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=hours,
+                y=cost_bau_m,
+                mode="lines+markers",
+                name="Projected Operation: Current OPF Cost",
+                line=dict(color="rgba(0,204,150,1)", width=3),
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=hours,
+                y=cost_wa_m,
+                mode="lines+markers",
+                name="Projected Operation: Weather-Aware Cost",
+                line=dict(color="rgba(171,99,250,1)", width=3),
+            )
+        )
+        fig.update_layout(
+            title="Difference in Generation Cost",
+            xaxis_title="Time [hours]",
+            yaxis_title="Cost [millions PKR]",
+            xaxis=dict(tickmode="linear", dtick=1, range=[0, max(hours)]),
+            template="plotly_dark",
+            legend=dict(x=0.01, y=0.99),
+            width=1200,
+            height=500,
+            margin=dict(l=60, r=40, t=60, b=50),
+        )
+        return fig
+        
+    def make_lost_savings_fig(hours,
+                          cost_bau,
+                          cost_weather,
+                          shed_bau,
+                          shed_wa):
+        # -- convert everything to the units the Colab code expects -------------
+        cost_bau_m  = [x / 1e6 for x in cost_bau]
+        cost_wa_m   = [x / 1e6 for x in cost_weather]
+    
+        lost_savings = [
+            wa - bau if wa > bau else 0
+            for wa, bau in zip(cost_wa_m, cost_bau_m)
+        ]
+    
+        # shed arrays come in MWh already; turn any None into 0
+        shed_bau = [float(x) if x is not None else 0.0 for x in shed_bau]
+        shed_wa  = [float(x) if x is not None else 0.0 for x in shed_wa]
+    
+        # PKR 45 000 per MWh  →  /1e6 gives “millions PKR”
+        lost_revenue = [
+            (bau_ld - wa_ld) * (45_000 / 1e6)
+            for bau_ld, wa_ld in zip(shed_bau, shed_wa)
+        ]
+    
+        # ----------------------------- Plotly figure --------------------------
+        fig = go.Figure()
+    
+        fig.add_trace(
+            go.Scatter(
+                x=hours,
+                y=lost_savings,
+                fill="tozeroy",
+                mode="none",
+                name="Difference in Generation Cost",
+                fillcolor="rgba(255,99,71,0.6)",     # soft red
+                hovertemplate="Hour %{x}: %{y:.2f} M PKR<extra></extra>",
+            )
+        )
+    
+        fig.add_trace(
+            go.Scatter(
+                x=hours,
+                y=lost_revenue,
+                fill="tozeroy",
+                mode="none",
+                name="Potential Loss of Revenue",
+                fillcolor="rgba(0,0,255,0.4)",       # soft blue
+                hovertemplate="Hour %{x}: %{y:.2f} M PKR<extra></extra>",
+            )
+        )
+    
+        fig.update_layout(
+            title="Potential Revenue Loss from Current OPF",
+            xaxis_title="Time [hours]",
+            yaxis_title="Lost Revenue [millions PKR]",
+            xaxis=dict(tickmode="linear", dtick=1, range=[0, max(hours)]),
+            template="plotly_dark",
+            width=1000,
+            height=500,
+            legend=dict(x=0.01, y=0.99),
+            margin=dict(l=60, r=40, t=60, b=50),
+        )
+        return fig
+
+    def make_line_loading_figs(hours,
+                           loading_bau,
+                           loading_wa,
+                           df_line):
+    
+        # ▸ convert to NumPy   [time  ×  lines&trafos]
+        bau = np.array(loading_bau)
+        wa  = np.array(loading_wa)
+    
+        # keep only the real transmission lines so legend lengths match
+        n_lines = len(df_line)
+        bau = bau[:, :n_lines]
+        wa  = wa[:, :n_lines]
+    
+        line_legends = [
+            f"Line {row['from_bus']}-{row['to_bus']}"
+            for _, row in df_line.iterrows()
+        ]
+    
+        colours = px.colors.qualitative.Plotly
+        colour_list = colours * (n_lines // len(colours) + 1)
+    
+        # ---------- Current-OPF figure (solid) -------------------------------
+        fig_bau = go.Figure()
+        for idx in range(n_lines):
+            fig_bau.add_trace(
+                go.Scatter(
+                    x=hours,
+                    y=bau[:, idx],
+                    mode="lines",
+                    line=dict(color=colour_list[idx], width=3, dash="solid"),
+                    name=line_legends[idx],
+                )
+            )
+        fig_bau.update_layout(
+            title="Projected Operation – Current OPF<br>Line Loading Over Time",
+            template="plotly_dark",
+            xaxis_title="Time [hours]",
+            yaxis_title="Line Loading [%]",
+            xaxis=dict(tickmode="linear", dtick=1, range=[0, max(hours)]),
+            width=1000,
+            height=500,
+            # legend=dict(x=0.01, y=0.99),
+            # margin=dict(l=60, r=40, t=80, b=50),
+            # --- new legend placement & room on the right -----------------
+            legend=dict(
+                orientation="v",      # vertical list
+                yanchor="top", y=1,   # pin its top-left corner …
+                xanchor="left", x=1.02,   # … just outside the plot area
+                bgcolor="rgba(0,0,0,0)",  # transparent background
+                borderwidth=0,
+            ),
+            margin=dict(l=60, r=220, t=80, b=50),  # extra space for the legend
+            # width=1000,                             # (optional) give the plot
+
+        )
+    
+        # ---------- Weather-Aware figure (dashed) ----------------------------
+        fig_wa = go.Figure()
+        for idx in range(n_lines):
+            fig_wa.add_trace(
+                go.Scatter(
+                    x=hours,
+                    y=wa[:, idx],
+                    mode="lines",
+                    line=dict(color=colour_list[idx], width=3, dash="dash"),
+                    name=line_legends[idx],
+                )
+            )
+        # fig_wa.update_layout(
+        #     title="Projected Operation – Weather-Aware OPF<br>Line Loading Over Time",
+        #     template="plotly_dark",
+        #     xaxis_title="Time [hours]",
+        #     yaxis_title="Line Loading [%]",
+        #     xaxis=dict(tickmode="linear", dtick=1, range=[0, max(hours)]),
+        #     width=1000,
+        #     height=500,
+        #     # legend=dict(x=0.01, y=0.99),
+        #     # margin=dict(l=60, r=40, t=80, b=50),
+            
+        # )
+        fig_wa.update_layout(
+            title="Projected Operation – Weather-Aware OPF<br>Line Loading Over Time",
+            template="plotly_dark",
+            xaxis_title="Time [hours]",
+            yaxis_title="Line Loading [%]",
+            xaxis=dict(tickmode="linear", dtick=1, range=[0, max(hours)]),
+            legend=dict(
+                orientation="v",
+                yanchor="top", y=1,
+                xanchor="left", x=1.02,
+                bgcolor="rgba(0,0,0,0)",
+                borderwidth=0,
+            ),
+            margin=dict(l=60, r=220, t=80, b=50),
+            width=1000,              # keep or remove as you prefer
+            height=500,
+        )
+        return fig_bau, fig_wa
+
+    def make_load_served_fig(bus_id: int,
+                         df_load_profile: pd.DataFrame,
+                         served_bau: list[list[float]],
+                         served_wa:  list[list[float]]):
+ 
+        hrs   = list(range(len(served_bau)))
+        col   = f"p_mw_bus_{bus_id}"
+        demand = df_load_profile[col].tolist()
+        bus_id_idx = df_load_params["bus"].tolist().index(bus_id)
+        srv_bau = [h[bus_id_idx] for h in served_bau]
+        srv_wa  = [h[bus_id_idx] for h in served_wa]
+    
+        fig = go.Figure()
+        fig.add_bar(x=hrs, y=demand,  name="Load Demand",
+                    marker=dict(color="rgba(99,110,250,0.8)"))
+        fig.add_bar(x=hrs, y=srv_bau, name="Current OPF Served",
+                    marker=dict(color="rgba(239,85,59,0.8)"))
+        fig.add_bar(x=hrs, y=srv_wa,  name="Weather-Aware Served",
+                    marker=dict(color="rgba(0,204,150,0.8)"))
+    
+        fig.update_layout(
+            title=f"Hourly Load-Served Comparison – Bus {bus_id}",
+            xaxis=dict(title="Hour", tickmode="linear", dtick=1),
+            yaxis_title="Load [MWh]",
+            barmode="group",
+            template="plotly_dark",
+            width=1200, height=600,
+            margin=dict(l=40, r=40, t=60, b=40),
+        )
+        return fig
+    def make_slack_dispatch_fig(planned: list[float],
+                                slack_bau: list[float],
+                                slack_wa:  list[float]) -> go.Figure:
+       
+        hrs = list(range(len(planned)))
+    
+        # replace None with 0 to avoid gaps
+        planned   = [p or 0 for p in planned]
+        slack_bau = [s or 0 for s in slack_bau]
+        slack_wa  = [s or 0 for s in slack_wa]
+    
+        fig = go.Figure()
+        fig.add_bar(x=hrs, y=planned,   name="Planned Dispatch",
+                    marker_color="rgba(99,110,250,0.8)")
+        fig.add_bar(x=hrs, y=slack_bau, name="Current OPF",
+                    marker_color="rgba(239,85,59,0.8)")
+        fig.add_bar(x=hrs, y=slack_wa,  name="Weather-Aware OPF",
+                    marker_color="rgba(0,204,150,0.8)")
+    
+        fig.update_layout(
+            title="Hourly Slack-Generator Dispatch Comparison",
+            xaxis=dict(title="Hour", tickmode="linear", dtick=1,
+                       range=[0, max(hrs)]),
+            yaxis_title="Generation [MWh]",
+            barmode="group",
+            template="plotly_dark",
+            legend_title="Scenario",
+            width=1200, height=600,
+            margin=dict(l=50, r=50, t=70, b=40),
+        )
+        return fig
+
+    # =========================================================
+    #  Generator-dispatch comparison  (single generator)
+    # =========================================================
+    def make_gen_dispatch_fig(bus_id: int,
+                              df_params: pd.DataFrame,
+                              df_profile: pd.DataFrame,
+                              gen_per_hour_bau: list[list[float]],
+                              gen_per_hour_wa:  list[list[float]]) -> go.Figure | None:
+    
+        # -------- column name & validity ----------------------------------
+        col = f"p_mw_PV{bus_id}"
+        if col not in df_profile.columns:
+            st.error(f"❌  Column '{col}' not found in the Generator Profile sheet.")
+            return None
+    
+        hours = list(range(len(gen_per_hour_bau)))          # usually 24
+        planned   = df_profile[col].tolist()
+    
+        # the first row in df_gen_params is the slack/ext-grid generator,
+        # so we skip it → index in the *hour-by-hour* lists:
+        gens        = df_params["bus"].tolist()[1:]
+        try:
+            idx = gens.index(bus_id)
+        except ValueError:
+            st.error(f"Generator bus {bus_id} not found in parameter sheet.")
+            return None
+    
+        served_bau  = [hour[idx] for hour in gen_per_hour_bau]
+        served_wa   = [hour[idx] for hour in gen_per_hour_wa]
+    
+        # -------- build the grouped-bar chart -----------------------------
+        fig = go.Figure()
+        fig.add_bar(x=hours, y=planned,   name="Planned Dispatch",
+                    marker_color="rgba(99,110,250,0.8)")
+        fig.add_bar(x=hours, y=served_bau, name="Projected: Current OPF",
+                    marker_color="rgba(239,85,59,0.8)")
+        fig.add_bar(x=hours, y=served_wa,  name="Projected: Weather-Aware OPF",
+                    marker_color="rgba(0,204,150,0.8)")
+    
+        fig.update_layout(
+            title=f"Hourly Generator Dispatch – Bus {bus_id}",
+            xaxis=dict(title="Time [hours]", tickmode="linear", dtick=1),
+            yaxis_title="Generation [MWh]",
+            barmode="group",
+            template="plotly_dark",
+            legend_title="Scenario",
+            height=600,
+            width=1200,
+            margin=dict(l=50, r=50, t=70, b=40),
+        )
+        return fig
+                                  
+    # --- caching helper -------------------------------------------------
+    def _remember(slot: str, fig):
+        st.session_state.da_figs[slot] = fig
+
+    
+    
+    # ╭──────────────────────────────── Load-Shedding ─────────────────────────╮
+    slot = "load_shed"
+    if st.button("Hourly Load-Shedding Comparison"):
+        shed_bau = [v or 0 for v in hourly_shed_bau]
+        shed_wa  = [v or 0 for v in hourly_shed_weather]
+        _remember(slot, make_load_shed_fig(hours, shed_bau, shed_wa))
+    
+    fig = st.session_state.da_figs.get(slot)
+    if fig:
+        st.plotly_chart(fig, use_container_width=True, key=slot)
     st.markdown("---")
-
-    # ── PLOT 3: Line‑Loading Evolution ───────────────────────────────────────
-    if st.button("3) Line‑Loading Over Time"):
-        st.session_state.show_lines = True
-    if st.session_state.show_lines:
-        x = list(range(lb_bau.shape[0]))
-        # BAU
-        fig3 = go.Figure()
-        for i in range(lb_bau.shape[1]):
-            fig3.add_trace(go.Scatter(x=x, y=lb_bau[:,i], name=legends[i], line=dict(color=colours[i])))
-        fig3.update_layout(title='Projected Operation - Current OPF Line Loading Over Time', xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
-        st.plotly_chart(fig3, use_container_width=True)
-        # WA
-        fig3b = go.Figure()
-        for i in range(lb_wa.shape[1]):
-            fig3b.add_trace(go.Scatter(x=x, y=lb_wa[:,i], name=legends[i], line=dict(dash="dash", color=colours[i])))
-        fig3b.update_layout(title='Projected Operation - Weather Risk Aware OPF Line Loading Over Time', xaxis_title="Hour", yaxis_title="%", template="plotly_dark")
-        st.plotly_chart(fig3b, use_container_width=True)
-
+    # ╰────────────────────────────────────────────────────────────────────────╯
+    
+    
+    
+    # ╭──────────────────────────── Generation-Cost diff ──────────────────────╮
+    slot = "cost_diff"
+    if st.button("Difference in Generation Cost"):
+        _remember(slot, make_cost_diff_fig(hours, cost_bau, cost_weather))
+    
+    fig = st.session_state.da_figs.get(slot)
+    if fig:
+        st.plotly_chart(fig, use_container_width=True, key=slot)
     st.markdown("---")
-
-    # ── PLOT 4: Slack Generator Comparison ──────────────────────────────────
-    if st.button("4) Hourly Slack Generator Dispatch Comparison"):
-        st.session_state.show_slack = True
-    if st.session_state.show_slack:
-        sl_bau = st.session_state.bau_results["slack_per_hour_bau"]
-        sl_wa  = st.session_state.weather_aware_results["slack_per_hour"]
-        fig4 = go.Figure()
-        fig4.add_bar(x=list(range(24)), y=sl_bau, name="Projected Operation - Current OPF Slack")
-        fig4.add_bar(x=list(range(24)), y=sl_wa,  name="Projected Operation - Weather Risk Aware OPF Slack")
-        fig4.update_layout(barmode="group", title="Slack Generator Dispatch", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
-        st.plotly_chart(fig4, use_container_width=True)
-
+    # ╰────────────────────────────────────────────────────────────────────────╯
+    
+    
+    
+    # ╭──────────────────────────── Potential Revenue-Loss ────────────────────╮
+    slot = "rev_loss"
+    if st.button("Potential Revenue Loss From Current OPF"):
+        _remember(slot,
+                  make_lost_savings_fig(hours,
+                                        cost_bau,
+                                        cost_weather,
+                                        hourly_shed_bau,
+                                        hourly_shed_weather))
+    
+    fig = st.session_state.da_figs.get(slot)
+    if fig:
+        st.plotly_chart(fig, use_container_width=True, key=slot)
     st.markdown("---")
+    # ╰────────────────────────────────────────────────────────────────────────╯
+    
+    
+    
+    # ╭──────────────────────────── Line-Loading over time ────────────────────╮
+    if st.button("Line Loading Over Time Comparison"):
+        fig_bau, fig_wa = make_line_loading_figs(hours,
+                                                 loading_percent_bau,
+                                                 loading_percent_wa,
+                                                 df_line)
+        _remember("line_bau", fig_bau)
+        _remember("line_wa",  fig_wa)
+    
+    for slot in ("line_bau", "line_wa"):
+        fig = st.session_state.da_figs.get(slot)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True, key=slot)
+    st.markdown("---")
+    # ╰────────────────────────────────────────────────────────────────────────╯
+    
+    
+    
+    # ╭──────────────────────────── Load-Served comparison ────────────────────╮
+    slot = "load_served"
+    bus_options = df_load_params["bus"].astype(int).tolist()
+    chosen_bus  = st.selectbox("Select Load-Bus", bus_options, key="ls_bus")
+    
+    if st.button("Show Load-Served Comparison"):
+        _remember(slot,
+                  make_load_served_fig(chosen_bus,
+                                       df_load_profile,
+                                       served_bau,
+                                       served_wa))
+    
+    fig = st.session_state.da_figs.get(slot)
+    if fig:
+        st.plotly_chart(fig, use_container_width=True, key=slot)
+    st.markdown("---")
+    # ╰────────────────────────────────────────────────────────────────────────╯
+    
+    
+    
+    # ╭──────────────────────────── Slack-Dispatch comparison ─────────────────╮
+    slot = "slack_disp"
+    if st.button("Slack Generator Dispatch Comparison"):
+        _remember(slot,
+                  make_slack_dispatch_fig(planned_slack,
+                                          slack_bau,
+                                          slack_wa))
+    
+    fig = st.session_state.da_figs.get(slot)
+    if fig:
+        st.plotly_chart(fig, use_container_width=True, key=slot)
+    st.markdown("---")
+    # ╰────────────────────────────────────────────────────────────────────────╯
+    
+    
+    
+    # ╭──────────────────────────── Generator-Dispatch (single) ───────────────╮
+    slot = "gen_disp"
+    gen_bus_options = df_gen_params["bus"].tolist()[1:]          # skip ext-grid
+    chosen_gen = st.selectbox("Select Generator (bus id)",
+                              gen_bus_options,
+                              format_func=lambda b: f"Generator {b}",
+                              key="gen_bus_picker")
+    
+    if st.button("Show Hourly Generator Dispatch Comparison"):
+        fig = make_gen_dispatch_fig(chosen_gen,
+                                    df_gen_params,
+                                    df_gen_profile,
+                                    st.session_state.gen_per_hour_bau,
+                                    st.session_state.gen_per_hour_wa)
+        if fig:
+            _remember(slot, fig)
+    
+    fig = st.session_state.da_figs.get(slot)
+    if fig:
+        st.plotly_chart(fig, use_container_width=True, key=slot)
+    st.markdown("---")
+    # ╰────────────────────────────────────────────────────────────────────────╯
 
-# ── PLOT 6: Load‑Served @ Selected Load Bus ─────────────────────────────
-    sel_bus = st.selectbox("Select Load Bus", valid_loads, key="bus_select")
-    if st.button("6) Show Load‑Served Comparison"):
-        st.session_state.bus_to_plot = sel_bus
-        st.session_state.show_bus = True
-    if st.session_state.show_bus and st.session_state.bus_to_plot is not None:
-        b = st.session_state.bus_to_plot
-        col = f"p_mw_bus_{b}"
-        lp  = st.session_state.network_data["df_load_profile"]
-        if col in lp.columns:
-            dem = lp[col].tolist()
-            idx = df_load.reset_index().index[df_load["bus"]==b][0]
-            bau = [h[idx] for h in st.session_state.bau_results["served_load_per_hour"]]
-            wa  = [h[idx] for h in st.session_state.weather_aware_results["served_load"]]
-            fig6 = go.Figure()
-            fig6.add_bar(x=hours, y=dem, name="Demand")
-            fig6.add_bar(x=hours, y=bau, name="Projected Operation - Current OPF Served")
-            fig6.add_bar(x=hours, y=wa,  name="Projected Operation - Weather Risk Aware OPF Served")
-            fig6.update_layout(barmode="group", title=f"Load‑Served @ Bus {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
-            st.plotly_chart(fig6, use_container_width=True)
-        else:
-            st.warning(f"No profile data for bus {b}.")
+
+    
 
 
-    # # # ── PLOT 5: Generator Dispatch @ Selected Generator ────────────────────
-    # gen = st.selectbox("Select Generator Bus", valid_gens, key="gen_to_plot")
-    # if st.button("5) Show Generator Dispatch Comparison"):
-    #     st.session_state.show_gen = True
-    # if st.session_state.show_gen and st.session_state.gen_to_plot is not None:
-    #     b = st.session_state.gen_to_plot
-    #     col = f"p_mw_PV{b}"
-    #     orig = df_gp[col].tolist()
-    #     idx  = df_gen.reset_index().index[df_gen["bus"]==b][0]
-    #     bau  = [h[idx] for h in st.session_state.bau_results["gen_per_hour_bau"]]
-    #     wa   = [h[idx] for h in st.session_state.weather_aware_results["gen_per_hour"]]
-    #     fig5 = go.Figure()
-    #     fig5.add_bar(x=hours, y=orig, name="Planned")
-    #     fig5.add_bar(x=hours, y=bau,  name="Projected Operation - Under Current OPF")
-    #     fig5.add_bar(x=hours, y=wa,   name="Projected Operation - Under Weather Risk Aware OPF")
-    #     fig5.update_layout(barmode="group", title=f"Dispatch @ Gen {b}", xaxis_title="Hour", yaxis_title="MWh", template="plotly_dark")
-    #     st.plotly_chart(fig5, use_container_width=True)
-
-    # st.markdown("---")
-
+   
     
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -2867,11 +3553,6 @@ elif selection == "About the App and Developers":
         """,
         unsafe_allow_html=True
     )
-
-
-
-
-
 
 
 
