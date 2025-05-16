@@ -761,8 +761,10 @@ if selection == "Network Initialization":
     # uploaded_file = st.file_uploader("Upload your network Excel file (e.g., Final_IEEE_9Bus_Parameters_only.xlsx)", type=["xlsx"], key="file_uploader")
 
     st.markdown(
-    "Donot have an Excel File in our specified format? \n [Download the sample IEEE‑9 or 14 bus network parameters](https://drive.google.com/drive/folders/1oT10dY6hZiM0q3AYiFzEqe_GQ5vA-eEa?usp=sharing) "
-    "from Google Drive.",
+    "Do not have an Excel File in our specified format?  \n"
+    "[Download the sample IEEE-9 or 14 bus network parameters]"
+    "(https://drive.google.com/drive/folders/1oT10dY6hZiM0q3AYiFzEqe_GQ5vA-eEa?usp=sharing)"
+    " from Google Drive.",
     unsafe_allow_html=True,
     )
     
@@ -981,7 +983,7 @@ if selection == "Network Initialization":
         
 # Page 2: Weather Risk Visualisation Using GEE
 elif selection == "Weather Risk Visualisation Using Google Earth Engine":
-    st.title("Weather Risk Visualisation Using GEE")
+    st.title("Weather Risk Visualisation Using Google Earth Engine")
 
     # Create columns for dropdown menus
     col1, col2, col3 = st.columns(3)
@@ -1001,7 +1003,7 @@ elif selection == "Weather Risk Visualisation Using Google Earth Engine":
         study_period = st.selectbox(
             "Study Period",
             options=period_options,
-            help="Weekly: Daily aggregated data, Monthly: Monthly aggregated data"
+            help="Weekly: Weekly aggregated data, Monthly: Monthly aggregated data"
         )
 
     with col3:
@@ -1662,11 +1664,11 @@ elif selection == "Projected Operation - Under Current OPF":
 
     
     mode = st.selectbox("Select Contingency Mode",
-                    ["Capped Contingency Mode",
-                     "Maximum Contingency Mode"])
+                    ["Capped Contingency Mode (20% of Line Outages)",
+                     "Maximum Contingency Mode (All Line Outages)"])
     cap_flag = (mode == "Capped Contingency Mode")
     
-    if st.button("Run Analysis"):
+    if st.button("Run Current Optimal Power Flow (OPF) Analysis"):
 
          # ---------------------------------------------------------------------------
         # Aliases so the Colab names still resolve
@@ -1920,11 +1922,11 @@ elif selection == "Projected Operation - Under Current OPF":
             for bus, shed in cumulative_load_shedding.items():
                 total = total_demand_per_bus.get(bus, {"p_mw": 0.0, "q_mvar": 0.0})
                 summary_rows.append({
-                    "bus": bus,
-                    "load shedding (MWh)":  shed["p_mw"],
-                    "load shedding (MVARh)":shed["q_mvar"],
-                    "total demand (MWh)":   total["p_mw"],
-                    "total demand (MVARh)": total["q_mvar"]
+                    "Bus": bus,
+                    "Load Shedding (MWh)":  shed["p_mw"],
+                    "Load Shedding (MVARh)":shed["q_mvar"],
+                    "Total Demand (MWh)":   total["p_mw"],
+                    "Total Demand (MVARh)": total["q_mvar"]
                 })
             day_end_df = pd.DataFrame(summary_rows)
         
@@ -1932,7 +1934,7 @@ elif selection == "Projected Operation - Under Current OPF":
             # 8. Build Hourly Generation Cost table
             # ----------------------------------------------------------------------
             hourly_cost_df = pd.DataFrame({
-                "hour": list(range(len(business_as_usuall_cost))),
+                "Hour": list(range(len(business_as_usuall_cost))),
                 "Current OPF Generation Cost (PKR)": business_as_usuall_cost
             })
         
@@ -1958,7 +1960,7 @@ elif selection == "Projected Operation - Under Current OPF":
         # store globally for helper functions
         globals()["line_outages"] = line_outages
     
-        with st.spinner("Running OPF …"):
+        with st.spinner("Running Current Optimal Power Flow (OPF) Analysis..."):
             (_lp_bau, _served, _gen, _slack, _rec, _cost,
              _shed, _seen, _shed_buses, _df_lines, _df_trafo,
              _load_df, _line_idx_map, _trafo_idx_map, _gdf,
@@ -2184,7 +2186,7 @@ elif selection == "Projected Operation - Under Current OPF":
 # Page-4  :  Projected Operation – Under Weather-Risk-Aware OPF
 # ─────────────────────────────────────────────────────────────────────────────
 elif selection == "Projected Operation - Under Weather Risk Aware OPF":
-    st.title("Projected Operation – Under Weather-Risk-Aware OPF")
+    st.title("Projected Operation – Under Weather Risk Aware OPF")
      # 🚦 NEW – make sure the cache from Page 3 exists
     if not st.session_state.get("bau_ready", False):
         st.info(
@@ -2204,11 +2206,11 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
     # ── 1 · UI  – contingency mode picker + button ─────────────────────────
     mode = st.selectbox(
         "Select Contingency Mode",
-        ["Capped Contingency Mode", "Maximum Contingency Mode"],
+        ["Capped Contingency Mode (20% of Line Outages)", "Maximum Contingency Mode (All Line Outages)"],
     )
     cap_flag = (mode == "Capped Contingency Mode")
 
-    if st.button("Run Weather-Aware Analysis"):
+    if st.button("Run Weather Aware Optimal Power Flow (OPF) Analysis"):
 
         # -------------------------------------------------------------------
         # 1-A · Build the outage list exactly like Page-3
@@ -2577,11 +2579,11 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
                 total = total_demand_per_bus.get(bus, {"p_mw": 0.0, "q_mvar": 0.0})
                 day_end_rows.append(
                     {
-                        "bus": bus,
-                        "load shedding (MWh)": shed["p_mw"],
-                        "load shedding (MVARh)": shed["q_mvar"],
-                        "total demand (MWh)": total["p_mw"],
-                        "total demand (MVARh)": total["q_mvar"],
+                        "Bus": bus,
+                        "Load Shedding (MWh)": shed["p_mw"],
+                        "Load Shedding (MVARh)": shed["q_mvar"],
+                        "Total Demand (MWh)": total["p_mw"],
+                        "Total Demand (MVARh)": total["q_mvar"],
                     }
                 )
             day_end_df = pd.DataFrame(day_end_rows)
@@ -2596,7 +2598,7 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
             # --- NEW: add Current-OPF cost & the difference ------------------------------
             hourly_cost_df = pd.DataFrame(
                 {
-                    "hour": list(range(num_hours)),
+                    "Hour": list(range(num_hours)),
                     "Weather-Aware OPF Cost (PKR)":   weather_aware_cost,
                     "Current OPF Generation Cost (PKR)":         business_as_usuall_cost,
                 }
@@ -2633,7 +2635,7 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
         #     # day_end_df, hourly_cost_df = weather_opf(line_outages)
         #     (*_, day_end_df, hourly_cost_df) = weather_opf(line_outages)
 
-        with st.spinner("Running weather-aware OPF …"):
+        with st.spinner("Running Weather Aware Optimal Power Flow (OPF) Analysis…"):
             (
                 loading_records,           # 0
                 shedding_buses,            # 1
@@ -3292,7 +3294,7 @@ elif selection == "Data Analytics":
                     marker_color="rgba(0,204,150,0.8)")
     
         fig.update_layout(
-            title=f"Hourly Generator Dispatch – Bus {bus_id}",
+            title=f"Hourly Generator Dispatch – Generator {bus_id}",
             xaxis=dict(title="Time [hours]", tickmode="linear", dtick=1),
             yaxis_title="Generation [MWh]",
             barmode="group",
@@ -3413,7 +3415,7 @@ elif selection == "Data Analytics":
     # ╭──────────────────────────── Generator-Dispatch (single) ───────────────╮
     slot = "gen_disp"
     gen_bus_options = df_gen_params["bus"].tolist()[1:]          # skip ext-grid
-    chosen_gen = st.selectbox("Select Generator (bus id)",
+    chosen_gen = st.selectbox("Select Generator",
                               gen_bus_options,
                               format_func=lambda b: f"Generator {b}",
                               key="gen_bus_picker")
@@ -3464,7 +3466,7 @@ elif selection == "About the App and Developers":
         ---
 
         ### Want to learn more about our Web App?  
-        * 📄 **Full Research Thesis** – [Google Drive (PDF)](https://drive.google.com/drive/folders/1mzGOuPhHn2UryrB2q5K4AZH2bPutvNhF?usp=drive_link)  
+        * 📄 **Detailed Thesis** – [Google Drive (PDF)](https://drive.google.com/drive/folders/1mzGOuPhHn2UryrB2q5K4AZH2bPutvNhF?usp=drive_link)  
         * ▶️ **Video Walk‑Through / Tutorial** – [YouTube](https://youtu.be/your-tutorial-video)  
 
         ---
