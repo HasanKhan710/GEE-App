@@ -1022,7 +1022,7 @@ elif selection == "Weather Risk Visualisation Using Google Earth Engine":
     else:
         # Button to process and show results
         if st.button("Process Weather Risk Data"):
-            with st.spinner("Processing weather risk data (Estimated Time 5-15 minutes)..."):
+            with st.spinner("Processing Weather Risk Data (Estimated Time 5-15 minutes)..."):
                 try:
                     # Initialize Earth Engine if not already done
                     try:
@@ -1664,8 +1664,8 @@ elif selection == "Projected Operation - Under Current OPF":
 
     
     mode = st.selectbox("Select Contingency Mode",
-                    ["Capped Contingency Mode (20% of Line Outages)",
-                     "Maximum Contingency Mode (All Line Outages)"])
+                    ["Capped Contingency Mode (20% of Outage Lines)",
+                     "Maximum Contingency Mode (All Outage Lines)"])
     cap_flag = (mode == "Capped Contingency Mode")
     
     if st.button("Run Current Optimal Power Flow (OPF) Analysis"):
@@ -1755,7 +1755,7 @@ elif selection == "Projected Operation - Under Current OPF":
                               for i in net.load.index}
             initial_load_q = {int(net.load.at[i, "bus"]): net.load.at[i, "q_mvar"]
                               for i in net.load.index}
-            shed_pct = 0.20
+            shed_pct = 0.10
             fixed_shed_p = {b: shed_pct * p for b, p in initial_load_p.items()}
             fixed_shed_q = {b: shed_pct * q for b, q in initial_load_q.items()}
         
@@ -1960,7 +1960,7 @@ elif selection == "Projected Operation - Under Current OPF":
         # store globally for helper functions
         globals()["line_outages"] = line_outages
     
-        with st.spinner("Running Current Optimal Power Flow (OPF) Analysis..."):
+        with st.spinner("Running Current Optimal Power Flow (OPF) Analysis (Estimated Time 5-10 minutes)..."):
             (_lp_bau, _served, _gen, _slack, _rec, _cost,
              _shed, _seen, _shed_buses, _df_lines, _df_trafo,
              _load_df, _line_idx_map, _trafo_idx_map, _gdf,
@@ -2016,10 +2016,10 @@ elif selection == "Projected Operation - Under Current OPF":
     if st.session_state.bau_ready:
 
         # 3-A · Summary tables
-        st.subheader("Day-End Summary")
+        st.subheader("Day Ahead Summary Under Current OPF")
         st.dataframe(st.session_state.bau_day_end_df, use_container_width=True)
 
-        st.subheader("Hourly Generation Cost")
+        st.subheader("Hourly Generation Cost Under Current OPF")
         st.dataframe(st.session_state.bau_hourly_cost_df, use_container_width=True)
 
         # 3-B · Hour picker  – value is *index*, label is pretty text
@@ -2206,7 +2206,7 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
     # ── 1 · UI  – contingency mode picker + button ─────────────────────────
     mode = st.selectbox(
         "Select Contingency Mode",
-        ["Capped Contingency Mode (20% of Line Outages)", "Maximum Contingency Mode (All Line Outages)"],
+        ["Capped Contingency Mode (20% of Outage Lines)", "Maximum Contingency Mode (All Outage Lines)"],
     )
     cap_flag = (mode == "Capped Contingency Mode")
 
@@ -2339,7 +2339,7 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
                 initial_load_q[bus] = net.load.at[idx, "q_mvar"]
         
             # Precompute the fixed shedding per bus
-            shed_pct = 0.20   # 0.05 --> 5% and 0.1 --> 10% Load Shedding
+            shed_pct = 0.10   # 0.05 --> 5% and 0.1 --> 10% Load Shedding
             fixed_shed_p = {bus: shed_pct * p for bus, p in initial_load_p.items()}
             fixed_shed_q = {bus: shed_pct * q for bus, q in initial_load_q.items()}
         
@@ -2635,7 +2635,7 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
         #     # day_end_df, hourly_cost_df = weather_opf(line_outages)
         #     (*_, day_end_df, hourly_cost_df) = weather_opf(line_outages)
 
-        with st.spinner("Running Weather Aware Optimal Power Flow (OPF) Analysis…"):
+        with st.spinner("Running Weather Aware Optimal Power Flow (OPF) Analysis (Estimated Time 5-10 minutes)…"):
             (
                 loading_records,           # 0
                 shedding_buses,            # 1
@@ -2732,10 +2732,10 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
     if st.session_state.get("wa_ready", False):
     
         # 2-A  summary tables ---------------------------------------------------
-        st.subheader("Day-End Summary (Weather-Aware OPF)")
+        st.subheader("Day Ahead Summary (Weather Risk Aware OPF)")
         st.dataframe(st.session_state.wa_day_end_df, use_container_width=True)
     
-        st.subheader("Hourly Generation Cost (Weather-Aware OPF)")
+        st.subheader("Hourly Generation Cost (Weather Risk Aware OPF)")
         st.dataframe(st.session_state.wa_hourly_cost_df, use_container_width=True)
     
         # 2-B  hour picker (keeps its value in session_state.wa_hour) -----------
@@ -2960,7 +2960,7 @@ elif selection == "Data Analytics":
                 x=hours,
                 y=shed_wa_mwh,
                 mode="lines+markers",
-                name="Projected Operation: Weather-Aware OPF Load Shedding",
+                name="Projected Operation: Weather Risk Aware OPF Load Shedding",
                 line=dict(color="rgba(239,85,59,1)", width=3),
                 marker=dict(size=6),
             )
@@ -3002,7 +3002,7 @@ elif selection == "Data Analytics":
                 x=hours,
                 y=cost_bau_m,
                 mode="lines+markers",
-                name="Projected Operation: Current OPF Cost",
+                name="Current OPF Cost",
                 line=dict(color="rgba(0,204,150,1)", width=3),
             )
         )
@@ -3011,7 +3011,7 @@ elif selection == "Data Analytics":
                 x=hours,
                 y=cost_wa_m,
                 mode="lines+markers",
-                name="Projected Operation: Weather-Aware Cost",
+                name="Weather Risk Aware OPF Cost",
                 line=dict(color="rgba(171,99,250,1)", width=3),
             )
         )
@@ -3174,7 +3174,7 @@ elif selection == "Data Analytics":
             
         # )
         fig_wa.update_layout(
-            title="Projected Operation – Weather-Aware OPF<br>Line Loading Over Time",
+            title="Projected Operation – Weather Risk Aware OPF<br>Line Loading Over Time",
             template="plotly_dark",
             xaxis_title="Time [hours]",
             yaxis_title="Line Loading [%]",
@@ -3359,7 +3359,7 @@ elif selection == "Data Analytics":
     
     
     # ╭──────────────────────────── Line-Loading over time ────────────────────╮
-    if st.button("Line Loading Over Time Comparison"):
+    if st.button("Comparison of Line Loading Over Time"):
         fig_bau, fig_wa = make_line_loading_figs(hours,
                                                  loading_percent_bau,
                                                  loading_percent_wa,
