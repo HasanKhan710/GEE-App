@@ -1665,9 +1665,9 @@ elif selection == "Projected Operation - Under Current OPF":
 
     
     mode = st.selectbox("Select Contingency Mode",
-                    ["Capped Contingency Mode (20% of Outage Lines)",
+                    ["Capped Contingency Mode (20% of Network Lines)",
                      "Maximum Contingency Mode (All Outage Lines)"])
-    cap_flag = (mode == "Capped Contingency Mode")
+    cap_flag = (mode == "Capped Contingency Mode (20% of Network Lines)")
     
     if st.button("Run Current Optimal Power Flow (OPF) Analysis"):
 
@@ -2207,9 +2207,9 @@ elif selection == "Projected Operation - Under Weather Risk Aware OPF":
     # ── 1 · UI  – contingency mode picker + button ─────────────────────────
     mode = st.selectbox(
         "Select Contingency Mode",
-        ["Capped Contingency Mode (20% of Outage Lines)", "Maximum Contingency Mode (All Outage Lines)"],
+        ["Capped Contingency Mode (20% of Network Lines)", "Maximum Contingency Mode (All Outage Lines)"],
     )
-    cap_flag = (mode == "Capped Contingency Mode")
+    cap_flag = (mode == "Capped Contingency Mode (20% of Network Lines)")
 
     if st.button("Run Weather Aware Optimal Power Flow (OPF) Analysis"):
 
