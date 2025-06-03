@@ -3468,6 +3468,7 @@ elif selection == "About the App and Developers":
 
         ### Want to learn more about our Web App?  
         * 📄 **Detailed Thesis** – [Google Drive (PDF)](https://drive.google.com/drive/folders/1mzGOuPhHn2UryrB2q5K4AZH2bPutvNhF?usp=drive_link)  
+        * 📄 **Project Poster Link** - [Link](https://drive.google.com/drive/folders/1u2SVV-dwH7qRZuLKusNJBYcRhZsiodh9?usp=sharing)
         * ▶️ **Video Walk‑Through / Tutorial** – [YouTube](https://youtu.be/your-tutorial-video)  
 
         ---
