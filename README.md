@@ -1,1 +1,1 @@
-# GEE-App
+# Google Earth Engine App
